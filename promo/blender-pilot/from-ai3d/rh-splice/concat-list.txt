@@ -1,0 +1,5 @@
+file 'seg-A-wave-v2.mp4'
+file 'seg-B-point.mp4'
+file 'seg-C-nod.mp4'
+file 'seg-D-emphasize.mp4'
+file 'seg-E-explain.mp4'

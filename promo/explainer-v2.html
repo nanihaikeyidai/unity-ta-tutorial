@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Unity TA 实战学堂 · Explainer v2</title>
+<style>
+  :root {
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+    --orange: #fb923c;
+    --bg: #050816;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #e2e8f0;
+  }
+  #stage-wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+  }
+  #view {
+    display: block;
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    background: var(--bg);
+    box-shadow: 0 0 60px rgba(34, 211, 238, 0.15);
+    cursor: pointer;
+  }
+  #controls {
+    position: fixed; right: 16px; bottom: 16px; z-index: 20;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+  }
+  #controls button {
+    pointer-events: auto;
+    border: 1px solid rgba(34,211,238,0.45);
+    background: rgba(8,20,40,0.85);
+    color: var(--cyan);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+  }
+  #controls button:hover { background: rgba(34,211,238,0.18); }
+  #controls button.rec { border-color: #f472b6; color: #f472b6; }
+  #status {
+    position: fixed; left: 16px; top: 12px; z-index: 20;
+    font-size: 12px; color: #64748b;
+    background: rgba(0,0,0,0.45);
+    padding: 4px 10px; border-radius: 6px;
+  }
+  /* Hidden offscreen video for RH gesture alpha strip */
+  #narratorVid {
+    position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="stage-wrap">
+  <canvas id="view" width="1280" height="720"></canvas>
+</div>
+<video id="narratorVid" muted playsinline preload="auto"
+  src="blender-pilot/from-ai3d/rh-splice/char-alpha.webm"></video>
+<div id="status">加载中…</div>
+<div id="controls">
+  <button type="button" id="btn-play">播放</button>
+  <button type="button" id="btn-record" class="rec">录制 WebM</button>
+</div>
+<audio id="narration" preload="auto" src="narration-indextts.wav"></audio>
+<script>
+(() => {
+  'use strict';
+
+  const W = 1280, H = 720;
+  const DURATION = 33.5; // IndexTTS ~30.0s + CTA hold
+  const FPS = 30;
+  const FONT = '"Noto Sans CJK SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+  const SEG_DUR = 6.584;
+  const GESTURE_SEG = {
+    wave: 0,
+    point: 1,
+    nod: 2,
+    emphasize: 3,
+    talk: 4,
+    explain: 4,
+    idle: -1
+  };
+
+  const view = document.getElementById('view');
+  const ctx = view.getContext('2d', { alpha: false });
+  const audio = document.getElementById('narration');
+  const narrVid = document.getElementById('narratorVid');
+  const statusEl = document.getElementById('status');
+  const btnPlay = document.getElementById('btn-play');
+  const btnRecord = document.getElementById('btn-record');
+
+  let cues = [];
+  let playing = false;
+  let t0 = 0;
+  let pausedAt = 0;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recording = false;
+  let lastGesture = null;
+  let useNarrVideo = false;
+  let renderMode = false; // when true, ignore wall clock; only seek(t)
+
+  const sprites = { idle: null, wave: null, talk: null, point: null, nod: null, emphasize: null, auth: null };
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('fail ' + src));
+      img.src = src;
+    });
+  }
+
+  async function tryLoad(paths) {
+    for (const p of paths) {
+      try { return await loadImage(p); } catch (_) {}
+    }
+    return null;
+  }
+
+  async function loadSprites() {
+    sprites.auth = await tryLoad([
+      'assets/ta-chibi-front-auth-rgba.png',
+      'assets/ta-chibi-front-auth.png',
+      'assets/pose-idle.png'
+    ]);
+    sprites.idle = await tryLoad(['assets/pose-idle.png', 'assets/silver-front.png']) || sprites.auth;
+    sprites.wave = await tryLoad(['assets/pose-wave.png', 'assets/silver-wave.png']) || sprites.idle;
+    sprites.talk = await tryLoad(['assets/pose-talk.png', 'assets/silver-talk.png']) || sprites.idle;
+    sprites.point = await tryLoad(['assets/pose-point.png', 'assets/silver-point.png']) || sprites.idle;
+    sprites.nod = await tryLoad(['assets/pose-nod.png', 'assets/silver-nod.png']) || sprites.idle;
+    sprites.emphasize = sprites.talk || sprites.idle;
+  }
+
+  async function loadCues() {
+    try {
+      const res = await fetch('cues.json');
+      cues = await res.json();
+    } catch (_) {
+      cues = [
+        { t: 0.0, end: 2.5, text: '欢迎来到 Unity TA 实战学堂。', gesture: 'wave', scene: 'intro' },
+        { t: 2.5, end: 7.4, text: '这里专为技术美术打造，用看得见的动画和中文语音，把渲染讲清楚。', gesture: 'talk', scene: 'intro' },
+        { t: 7.4, end: 11.6, text: '学堂分三条主线：URP 管线，把一帧拆开看 Forward Plus 与 Renderer Feature；', gesture: 'point', scene: 'urp' },
+        { t: 11.6, end: 15.7, text: '性能优化，用 Batcher 和 Overdraw 热力建立 Profiler 直觉；', gesture: 'emphasize', scene: 'perf' },
+        { t: 15.7, end: 19.8, text: '还有 Shader 技术，Fresnel、Dissolve，公式直接画成光影。', gesture: 'talk', scene: 'shader' },
+        { t: 19.8, end: 22.7, text: '每课都有程序动画演示，点讲解就能听。', gesture: 'nod', scene: 'shader' },
+        { t: 22.7, end: 27.0, text: '建议从 URP 第一章起步，建好心智模型，再钻性能和着色器。', gesture: 'point', scene: 'cta' },
+        { t: 27.0, end: 30.1, text: '打开站点，开始你的 TA 进阶之路。', gesture: 'wave', scene: 'cta' },
+        { t: 30.1, end: 33.5, text: 'Unity TA 实战学堂 · 开始学习', gesture: 'idle', scene: 'cta' }
+      ];
+    }
+  }
+
+  function waitVideoReady(vid, timeoutMs) {
+    return new Promise((resolve) => {
+      if (vid.readyState >= 2) return resolve(true);
+      let done = false;
+      const finish = (ok) => { if (done) return; done = true; resolve(ok); };
+      const t = setTimeout(() => finish(vid.readyState >= 2), timeoutMs || 8000);
+      vid.addEventListener('loadeddata', () => { clearTimeout(t); finish(true); }, { once: true });
+      vid.addEventListener('error', () => { clearTimeout(t); finish(false); }, { once: true });
+      try { vid.load(); } catch (_) {}
+    });
+  }
+
+  // --- Particles ---
+  const PARTICLE_N = 90;
+  const particles = Array.from({ length: PARTICLE_N }, (_, i) => ({
+    x: (i * 97) % W,
+    y: (i * 53) % H,
+    vx: ((i % 7) - 3) * 0.08,
+    vy: ((i % 5) - 2) * 0.08,
+    r: 0.7 + (i % 5) * 0.28,
+    a: 0.18 + (i % 6) * 0.06
+  }));
+
+  function updateParticles(t) {
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x = ((i * 97) + t * p.vx * 60 + W) % W;
+      p.y = ((i * 53) + t * p.vy * 60 + H) % H;
+    }
+  }
+
+  function drawParticles(c) {
+    c.save();
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      c.fillStyle = `rgba(34,211,238,${p.a})`;
+      c.beginPath();
+      c.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      c.fill();
+      if (i % 9 === 0) {
+        const q = particles[(i + 13) % particles.length];
+        const dx = p.x - q.x, dy = p.y - q.y;
+        if (dx * dx + dy * dy < 160 * 160) {
+          c.strokeStyle = 'rgba(167,139,250,0.12)';
+          c.lineWidth = 1;
+          c.beginPath();
+          c.moveTo(p.x, p.y);
+          c.lineTo(q.x, q.y);
+          c.stroke();
+        }
+      }
+    }
+    c.restore();
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(x + rr, y);
+    c.arcTo(x + w, y, x + w, y + h, rr);
+    c.arcTo(x + w, y + h, x, y + h, rr);
+    c.arcTo(x, y + h, x, y, rr);
+    c.arcTo(x, y, x + w, y, rr);
+    c.closePath();
+  }
+
+  function glassCard(c, x, y, w, h, glow) {
+    c.save();
+    roundRect(c, x, y, w, h, 14);
+    c.fillStyle = 'rgba(8, 20, 40, 0.78)';
+    c.fill();
+    c.strokeStyle = glow || 'rgba(34,211,238,0.45)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.restore();
+  }
+
+  function cueAt(t) {
+    let cur = cues[0] || null;
+    for (const cu of cues) {
+      if (t >= cu.t) cur = cu;
+    }
+    return cur;
+  }
+
+  function sceneLocal(t, cue) {
+    if (!cue) return t;
+    // local time within continuous scene block
+    let start = cue.t;
+    for (const cu of cues) {
+      if (cu.scene === cue.scene && cu.t <= t) start = Math.min(start, cu.t);
+    }
+    // find earliest cue with same scene contiguous from current
+    let s = cue.t;
+    for (let i = cues.indexOf(cue); i >= 0; i--) {
+      if (cues[i].scene === cue.scene) s = cues[i].t;
+      else break;
+    }
+    return Math.max(0, t - s);
+  }
+
+  function easeOutCubic(x) {
+    return 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  }
+
+  function wrapText(c, text, maxW) {
+    if (!text) return [];
+    const chars = [...text];
+    const lines = [];
+    let line = '';
+    for (const ch of chars) {
+      const test = line + ch;
+      if (c.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = ch;
+      } else line = test;
+    }
+    if (line) lines.push(line);
+    return lines.slice(0, 3);
+  }
+
+  // --- Background ---
+  function drawBg(c, t, scene) {
+    const g = c.createLinearGradient(0, 0, W, H);
+    if (scene === 'perf') {
+      g.addColorStop(0, '#100418');
+      g.addColorStop(0.55, '#0a1028');
+      g.addColorStop(1, '#1a0814');
+    } else if (scene === 'shader') {
+      g.addColorStop(0, '#08061a');
+      g.addColorStop(0.5, '#0c1230');
+      g.addColorStop(1, '#140828');
+    } else if (scene === 'urp') {
+      g.addColorStop(0, '#041018');
+      g.addColorStop(0.5, '#071428');
+      g.addColorStop(1, '#0a1a30');
+    } else {
+      g.addColorStop(0, '#050816');
+      g.addColorStop(0.5, '#0a1028');
+      g.addColorStop(1, '#12081f');
+    }
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+
+    // grid
+    c.strokeStyle = 'rgba(34,211,238,0.045)';
+    c.lineWidth = 1;
+    for (let x = 0; x < W; x += 64) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    for (let y = 0; y < H; y += 64) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const ox = 220 + Math.sin(t * 0.4) * 90;
+    const oy = 160 + Math.cos(t * 0.33) * 70;
+    const rg = c.createRadialGradient(ox, oy, 8, ox, oy, 240);
+    rg.addColorStop(0, 'rgba(34,211,238,0.16)');
+    rg.addColorStop(1, 'rgba(34,211,238,0)');
+    c.fillStyle = rg;
+    c.fillRect(0, 0, W, H);
+    const ox2 = W - 240 + Math.cos(t * 0.35) * 80;
+    const oy2 = H - 180 + Math.sin(t * 0.45) * 55;
+    const rg2 = c.createRadialGradient(ox2, oy2, 8, ox2, oy2, 260);
+    rg2.addColorStop(0, 'rgba(167,139,250,0.14)');
+    rg2.addColorStop(1, 'rgba(167,139,250,0)');
+    c.fillStyle = rg2;
+    c.fillRect(0, 0, W, H);
+    c.restore();
+  }
+
+  // --- Scenes ---
+  function drawIntro(c, t, local) {
+    const fade = easeOutCubic(local / 0.55);
+    c.save();
+    c.globalAlpha = fade;
+
+    glassCard(c, W / 2 - 130, 118, 260, 34, 'rgba(34,211,238,0.55)');
+    c.fillStyle = '#22d3ee';
+    c.font = `600 12px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('TECH ARTIST ACADEMY · 程序化解说', W / 2, 140);
+
+    // kinetic title reveal
+    const title = 'Unity TA 实战学堂';
+    const reveal = Math.min(1, local / 1.1);
+    const n = Math.floor(title.length * reveal);
+    const shown = title.slice(0, Math.max(1, n));
+    c.save();
+    c.translate(W / 2, 230);
+    const scale = 1 + Math.sin(t * 2) * 0.012;
+    c.scale(scale, scale);
+    const grad = c.createLinearGradient(-300, 0, 300, 0);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.4, '#22d3ee');
+    grad.addColorStop(1, '#a78bfa');
+    c.fillStyle = grad;
+    c.font = `800 56px ${FONT}`;
+    c.textAlign = 'center';
+    c.shadowColor = 'rgba(34,211,238,0.5)';
+    c.shadowBlur = 28;
+    c.fillText(shown, 0, 0);
+    c.shadowBlur = 0;
+    // caret
+    if (reveal < 1) {
+      const tw = c.measureText(shown).width;
+      c.fillStyle = `rgba(34,211,238,${0.4 + 0.6 * Math.abs(Math.sin(t * 8))})`;
+      c.fillRect(tw / 2 + 6, -36, 3, 44);
+    }
+    c.restore();
+
+    c.fillStyle = '#94a3b8';
+    c.font = `400 18px ${FONT}`;
+    c.textAlign = 'center';
+    c.globalAlpha = fade * easeOutCubic((local - 0.8) / 0.5);
+    c.fillText('看得见的渲染 · 中文语音讲解 · 程序动画演示', W / 2, 292);
+
+    // three pillars with mini icons
+    const pillars = [
+      { label: 'URP 管线', sub: '一帧拆解', color: '#22d3ee', icon: '⬡' },
+      { label: '性能优化', sub: 'Profiler 直觉', color: '#f472b6', icon: '▮' },
+      { label: 'Shader 技术', sub: '公式成光影', color: '#a78bfa', icon: '✧' }
+    ];
+    pillars.forEach((p, i) => {
+      const appear = easeOutCubic((local - 1.2 - i * 0.25) / 0.45);
+      if (appear <= 0) return;
+      const x = W / 2 - 300 + i * 210;
+      const y = 360 + (1 - appear) * 30;
+      c.save();
+      c.globalAlpha = fade * appear;
+      const pulse = 0.55 + 0.45 * Math.sin(t * 2.4 + i);
+      glassCard(c, x, y, 180, 100, `${p.color}${Math.floor(40 + pulse * 80).toString(16).padStart(2,'0')}`);
+      // accent bar
+      c.fillStyle = p.color;
+      roundRect(c, x + 14, y + 16, 6, 68, 3);
+      c.fill();
+      c.fillStyle = p.color;
+      c.font = `700 22px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillText(p.icon + '  ' + p.label, x + 30, y + 48);
+      c.fillStyle = '#94a3b8';
+      c.font = `400 13px ${FONT}`;
+      c.fillText(p.sub, x + 34, y + 76);
+      c.restore();
+    });
+    c.restore();
+  }
+
+  function drawURP(c, t, local) {
+    c.save();
+    c.fillStyle = '#22d3ee';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('URP · 一帧管线拆解', 72, 92);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('Forward Plus · Renderer Feature · 看得见的数据流', 72, 118);
+
+    // Horizontal pipeline stages (Opus-style diagram)
+    const stages = [
+      { id: 'Camera', cn: '相机' },
+      { id: 'Culling', cn: '裁剪' },
+      { id: 'Lights', cn: '灯光列表' },
+      { id: 'Opaque', cn: '不透明' },
+      { id: 'Sky', cn: '天空/雾' },
+      { id: 'Feature', cn: 'Renderer Feature' },
+      { id: 'Post', cn: '后处理' }
+    ];
+    const lit = Math.min(stages.length, Math.floor(local * 1.55) + 1);
+    const baseY = 280;
+    const startX = 90;
+    const gap = 155;
+
+    // connection rail
+    c.strokeStyle = 'rgba(34,211,238,0.25)';
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(startX, baseY);
+    c.lineTo(startX + gap * (stages.length - 1), baseY);
+    c.stroke();
+
+    // traveling packet
+    const pkt = Math.min(stages.length - 1, local * 1.4);
+    const pktX = startX + pkt * gap;
+    c.save();
+    c.shadowColor = '#22d3ee';
+    c.shadowBlur = 18;
+    c.fillStyle = '#22d3ee';
+    c.beginPath();
+    c.arc(pktX, baseY, 7, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    stages.forEach((s, i) => {
+      const x = startX + i * gap;
+      const on = i < lit;
+      const pulse = on ? 1 + 0.035 * Math.sin(t * 5 + i) : 1;
+      c.save();
+      c.translate(x, baseY);
+      c.scale(pulse, pulse);
+      // node
+      c.beginPath();
+      c.arc(0, 0, 16, 0, Math.PI * 2);
+      c.fillStyle = on ? '#22d3ee' : '#334155';
+      c.fill();
+      if (on) {
+        c.strokeStyle = 'rgba(34,211,238,0.5)';
+        c.lineWidth = 6;
+        c.stroke();
+      }
+      // card above/below alternating
+      const cardY = (i % 2 === 0) ? -120 : 40;
+      glassCard(c, -68, cardY, 136, 64, on ? 'rgba(34,211,238,0.75)' : 'rgba(100,116,139,0.35)');
+      c.fillStyle = on ? '#e2e8f0' : '#64748b';
+      c.font = `700 14px ${FONT}`;
+      c.textAlign = 'center';
+      c.fillText(s.id, 0, cardY + 28);
+      c.fillStyle = on ? '#67e8f9' : '#64748b';
+      c.font = `400 12px ${FONT}`;
+      c.fillText(s.cn, 0, cardY + 48);
+      // stem
+      c.strokeStyle = on ? 'rgba(34,211,238,0.55)' : 'rgba(100,116,139,0.3)';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(0, (i % 2 === 0) ? -16 : 16);
+      c.lineTo(0, (i % 2 === 0) ? cardY + 64 : cardY);
+      c.stroke();
+      c.restore();
+    });
+
+    // legend chip
+    glassCard(c, 72, 520, 420, 42, 'rgba(34,211,238,0.35)');
+    c.fillStyle = '#67e8f9';
+    c.font = `500 13px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('数据沿管线流动 · 高亮节点 = 当前讲解焦点', 88, 546);
+    c.restore();
+  }
+
+  function drawPerf(c, t, local) {
+    c.save();
+    c.fillStyle = '#f472b6';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('性能 · Batcher / Overdraw 热力', 72, 92);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('用热力建立 Profiler 直觉 · 少 Draw Call · 控 Overdraw', 72, 118);
+
+    // Heatmap grid (overdraw metaphor)
+    const cols = 14, rows = 8;
+    const cellW = 28, cellH = 28;
+    const ox = 90, oy = 180;
+    const heatProgress = easeOutCubic(Math.min(1, local / 2.2));
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const n = Math.sin(x * 0.55 + t * 1.2) * Math.cos(y * 0.7 + t * 0.9);
+        const centerBoost = 1 - Math.hypot(x - 7, y - 3.5) / 9;
+        let v = (0.35 + 0.45 * n + 0.5 * centerBoost) * heatProgress;
+        v = Math.max(0, Math.min(1, v));
+        // layers stacking effect
+        const layers = Math.floor(v * 4 * heatProgress);
+        const r = Math.floor(40 + v * 200);
+        const g = Math.floor(20 + (1 - v) * 80);
+        const b = Math.floor(60 + (1 - v) * 40);
+        c.fillStyle = `rgba(${r},${g},${b},${0.35 + v * 0.55})`;
+        roundRect(c, ox + x * cellW, oy + y * cellH, cellW - 2, cellH - 2, 4);
+        c.fill();
+        if (layers >= 3) {
+          c.strokeStyle = 'rgba(251,146,60,0.7)';
+          c.lineWidth = 1.5;
+          c.stroke();
+        }
+      }
+    }
+    c.fillStyle = '#fda4af';
+    c.font = `600 13px ${FONT}`;
+    c.fillText('Overdraw 热力示意', ox, oy + rows * cellH + 28);
+
+    // color legend
+    for (let i = 0; i < 6; i++) {
+      const v = i / 5;
+      const r = Math.floor(40 + v * 200);
+      const g = Math.floor(20 + (1 - v) * 80);
+      const b = Math.floor(60 + (1 - v) * 40);
+      c.fillStyle = `rgb(${r},${g},${b})`;
+      c.fillRect(ox + 180 + i * 28, oy + rows * cellH + 14, 26, 12);
+    }
+    c.fillStyle = '#94a3b8';
+    c.font = `400 11px ${FONT}`;
+    c.fillText('低', ox + 180, oy + rows * cellH + 42);
+    c.fillText('高', ox + 180 + 5 * 28, oy + rows * cellH + 42);
+
+    // SRP Batcher + Profiler bars
+    glassCard(c, 560, 170, 640, 360, 'rgba(244,114,182,0.35)');
+    c.fillStyle = '#f9a8d4';
+    c.font = `700 16px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('Profiler 直觉板', 584, 204);
+
+    // Batcher counter
+    const batchTarget = Math.floor(12 + 80 * (1 - Math.min(1, local / 2.5)));
+    const drawCalls = Math.floor(180 - 140 * Math.min(1, local / 2.8));
+    glassCard(c, 584, 224, 280, 78, 'rgba(34,211,238,0.4)');
+    c.fillStyle = '#67e8f9';
+    c.font = `600 12px ${FONT}`;
+    c.fillText('SRP Batcher 合并后', 600, 250);
+    c.fillStyle = '#fff';
+    c.font = `800 28px ${FONT}`;
+    c.fillText(String(batchTarget), 600, 286);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 12px ${FONT}`;
+    c.fillText('Batches', 680, 286);
+
+    glassCard(c, 884, 224, 280, 78, 'rgba(251,146,60,0.4)');
+    c.fillStyle = '#fdba74';
+    c.font = `600 12px ${FONT}`;
+    c.fillText('Draw Calls（优化前→后）', 900, 250);
+    c.fillStyle = '#fff';
+    c.font = `800 28px ${FONT}`;
+    c.fillText(String(drawCalls), 900, 286);
+
+    const bars = [
+      { label: 'CPU', v: 0.55 },
+      { label: 'GPU', v: 0.78 },
+      { label: 'Draw', v: 0.42 },
+      { label: 'Tris', v: 0.88 },
+      { label: 'Batch', v: 0.35 },
+      { label: 'SetPass', v: 0.62 },
+      { label: 'GC', v: 0.28 }
+    ];
+    bars.forEach((b, i) => {
+      const target = b.v * Math.min(1, local / 1.6 + 0.15);
+      const h = 140 * target * (0.94 + 0.06 * Math.sin(t * 3 + i));
+      const x = 600 + i * 78;
+      const y = 480 - h;
+      c.fillStyle = 'rgba(30,41,59,0.7)';
+      roundRect(c, x, 340, 52, 150, 8);
+      c.fill();
+      const grad = c.createLinearGradient(0, 490, 0, 340);
+      grad.addColorStop(0, '#22d3ee');
+      grad.addColorStop(1, '#f472b6');
+      c.fillStyle = grad;
+      roundRect(c, x + 8, y, 36, h, 6);
+      c.fill();
+      c.fillStyle = '#94a3b8';
+      c.font = `11px ${FONT}`;
+      c.textAlign = 'center';
+      c.fillText(b.label, x + 26, 510);
+    });
+    c.restore();
+  }
+
+  function drawShader(c, t, local) {
+    c.save();
+    c.fillStyle = '#a78bfa';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('Shader · Fresnel / Dissolve', 72, 92);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('公式直接画成光影 · 看见边缘光与消融阈值', 72, 118);
+
+    // Formula cards
+    glassCard(c, 72, 150, 300, 86, 'rgba(34,211,238,0.4)');
+    c.fillStyle = '#67e8f9';
+    c.font = `600 12px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('Fresnel', 90, 176);
+    c.fillStyle = '#e2e8f0';
+    c.font = `700 18px ui-monospace, monospace`;
+    c.fillText('pow(1 - N·V, exp)', 90, 210);
+
+    glassCard(c, 72, 250, 300, 86, 'rgba(244,114,182,0.4)');
+    c.fillStyle = '#f9a8d4';
+    c.font = `600 12px ${FONT}`;
+    c.fillText('Dissolve', 90, 276);
+    c.fillStyle = '#e2e8f0';
+    c.font = `700 18px ui-monospace, monospace`;
+    c.fillText('noise > threshold', 90, 310);
+
+    // Fresnel orb
+    const cx = 560, cy = 380, R = 118;
+    const fresnel = 0.3 + 0.7 * Math.min(1, local / 1.8);
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(t * 0.35);
+    for (let i = 0; i < 4; i++) {
+      c.beginPath();
+      c.arc(0, 0, R - i * 10, 0, Math.PI * 2);
+      c.strokeStyle = `rgba(34,211,238,${(0.6 - i * 0.12) * fresnel})`;
+      c.lineWidth = 12 - i * 2;
+      c.stroke();
+    }
+    const rg = c.createRadialGradient(-20, -20, 10, 0, 0, R);
+    rg.addColorStop(0, 'rgba(15,23,42,0.95)');
+    rg.addColorStop(0.65, 'rgba(30,41,59,0.7)');
+    rg.addColorStop(1, `rgba(34,211,238,${0.5 * fresnel})`);
+    c.beginPath();
+    c.arc(0, 0, R - 6, 0, Math.PI * 2);
+    c.fillStyle = rg;
+    c.fill();
+    // specular highlight
+    c.beginPath();
+    c.arc(-36, -40, 18, 0, Math.PI * 2);
+    c.fillStyle = `rgba(255,255,255,${0.18 * fresnel})`;
+    c.fill();
+    c.restore();
+    c.fillStyle = '#22d3ee';
+    c.font = `700 16px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('Fresnel 边缘光', cx, cy + R + 36);
+
+    // Dissolve orb
+    const dx = 920, dy = 380, dR = 118;
+    const dissolve = Math.min(1, Math.max(0, (local - 1.0) / 3.2));
+    c.save();
+    c.beginPath();
+    c.arc(dx, dy, dR, 0, Math.PI * 2);
+    c.clip();
+    const g2 = c.createLinearGradient(dx - dR, dy - dR, dx + dR, dy + dR);
+    g2.addColorStop(0, '#7c3aed');
+    g2.addColorStop(0.5, '#22d3ee');
+    g2.addColorStop(1, '#f472b6');
+    c.fillStyle = g2;
+    c.fillRect(dx - dR, dy - dR, dR * 2, dR * 2);
+
+    // deterministic pseudo-noise holes
+    for (let i = 0; i < 110; i++) {
+      const sx = ((i * 73) % 200) / 200;
+      const sy = ((i * 47) % 200) / 200;
+      const thr = ((i * 19) % 100) / 100;
+      const px = dx - dR + sx * dR * 2;
+      const py = dy - dR + sy * dR * 2;
+      if (thr < dissolve) {
+        c.globalCompositeOperation = 'destination-out';
+        c.beginPath();
+        c.arc(px, py, 5 + (i % 6), 0, Math.PI * 2);
+        c.fill();
+        c.globalCompositeOperation = 'source-over';
+        // edge ember
+        if (thr > dissolve - 0.08) {
+          c.fillStyle = `rgba(251,146,60,${0.55})`;
+          c.beginPath();
+          c.arc(px, py, 4 + (i % 3), 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    }
+    c.strokeStyle = `rgba(244,114,182,${0.35 + dissolve * 0.5})`;
+    c.lineWidth = 5;
+    c.beginPath();
+    c.arc(dx, dy, dR * (1 - dissolve * 0.82), 0, Math.PI * 2);
+    c.stroke();
+    c.restore();
+
+    c.fillStyle = '#a78bfa';
+    c.font = `700 16px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('Dissolve 消融', dx, dy + dR + 36);
+
+    // threshold slider
+    glassCard(c, 780, 150, 400, 56, 'rgba(167,139,250,0.4)');
+    c.fillStyle = '#c4b5fd';
+    c.font = `600 12px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('threshold', 800, 174);
+    c.fillStyle = 'rgba(51,65,85,0.9)';
+    roundRect(c, 800, 186, 360, 10, 5);
+    c.fill();
+    c.fillStyle = '#f472b6';
+    roundRect(c, 800, 186, 360 * dissolve, 10, 5);
+    c.fill();
+    c.restore();
+  }
+
+  function drawCTA(c, t, local) {
+    c.save();
+    c.fillStyle = '#e2e8f0';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('学习路径 · 从心智模型起步', 72, 100);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('建议顺序：URP 第一章 → 性能优化 → Shader 技术', 72, 126);
+
+    const steps = [
+      { label: '01  URP', sub: '建心智模型', color: '#22d3ee' },
+      { label: '02  性能', sub: 'Profiler 直觉', color: '#f472b6' },
+      { label: '03  Shader', sub: '公式成光影', color: '#a78bfa' }
+    ];
+    const progress = Math.min(1, local / 2.2);
+    steps.forEach((s, i) => {
+      const x = 140 + i * 300;
+      const y = 240;
+      const on = progress > i / 3.2;
+      const appear = easeOutCubic((local - i * 0.35) / 0.5);
+      c.save();
+      c.globalAlpha = Math.max(0, appear);
+      glassCard(c, x, y, 240, 130, on ? s.color : 'rgba(100,116,139,0.35)');
+      c.fillStyle = on ? s.color : '#64748b';
+      roundRect(c, x + 18, y + 18, 8, 94, 4);
+      c.fill();
+      c.font = `800 26px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillText(s.label, x + 44, y + 58);
+      c.fillStyle = '#94a3b8';
+      c.font = `400 14px ${FONT}`;
+      c.fillText(s.sub, x + 44, y + 92);
+      if (i < steps.length - 1) {
+        c.strokeStyle = on ? s.color : 'rgba(100,116,139,0.4)';
+        c.lineWidth = 3;
+        c.beginPath();
+        c.moveTo(x + 240, y + 65);
+        c.lineTo(x + 300, y + 65);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(x + 300, y + 65);
+        c.lineTo(x + 288, y + 56);
+        c.lineTo(x + 288, y + 74);
+        c.closePath();
+        c.fillStyle = c.strokeStyle;
+        c.fill();
+      }
+      c.restore();
+    });
+
+    const pulse = 1 + 0.035 * Math.sin(t * 4);
+    c.save();
+    c.translate(W / 2 + 40, 500);
+    c.scale(pulse, pulse);
+    roundRect(c, -180, -30, 360, 60, 30);
+    const bg = c.createLinearGradient(-180, 0, 180, 0);
+    bg.addColorStop(0, '#0891b2');
+    bg.addColorStop(1, '#7c3aed');
+    c.fillStyle = bg;
+    c.shadowColor = 'rgba(34,211,238,0.55)';
+    c.shadowBlur = 24;
+    c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = '#fff';
+    c.font = `700 22px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('打开站点 · 开始学习', 0, 8);
+    c.restore();
+    c.restore();
+  }
+
+  function drawScene(c, scene, t, cue) {
+    const local = sceneLocal(t, cue);
+    switch (scene) {
+      case 'intro': drawIntro(c, t, local); break;
+      case 'urp': drawURP(c, t, local); break;
+      case 'perf': drawPerf(c, t, local); break;
+      case 'shader': drawShader(c, t, local); break;
+      case 'cta': drawCTA(c, t, local); break;
+      default: drawIntro(c, t, local);
+    }
+  }
+
+  function drawSceneLabel(c, scene) {
+    const map = {
+      intro: 'INTRO · 开场',
+      urp: 'URP PIPELINE',
+      perf: 'PERFORMANCE',
+      shader: 'SHADER LAB',
+      cta: 'START LEARNING'
+    };
+    glassCard(c, 36, 24, 220, 34, 'rgba(34,211,238,0.4)');
+    c.fillStyle = '#22d3ee';
+    c.font = `600 12px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText(map[scene] || scene.toUpperCase(), 52, 46);
+  }
+
+  function narratorVideoTime(gesture, cue, t) {
+    const idx = GESTURE_SEG[gesture];
+    if (idx == null || idx < 0) return null;
+    const cueDur = Math.max(0.01, (cue.end || (cue.t + 2)) - cue.t);
+    const u = Math.min(1, Math.max(0, (t - cue.t) / cueDur));
+    // scrub action window inside segment (skip long idle tails)
+    const actionT = 0.55 + u * 4.6;
+    return idx * SEG_DUR + Math.min(SEG_DUR - 0.05, actionT);
+  }
+
+  function syncNarratorVideo(t, gesture, cue) {
+    if (!useNarrVideo || !narrVid) return;
+    const target = narratorVideoTime(gesture, cue, t);
+    if (target == null) {
+      // idle still: hold first frame of A
+      if (Math.abs(narrVid.currentTime - 0.05) > 0.08) {
+        try { narrVid.currentTime = 0.05; } catch (_) {}
+      }
+      if (!narrVid.paused) narrVid.pause();
+      return;
+    }
+    if (renderMode) {
+      if (Math.abs(narrVid.currentTime - target) > 0.04) {
+        try { narrVid.currentTime = target; } catch (_) {}
+      }
+      if (!narrVid.paused) narrVid.pause();
+      return;
+    }
+    // live: on gesture change, jump near action start and play
+    if (gesture !== lastGesture) {
+      const idx = GESTURE_SEG[gesture];
+      const start = (idx >= 0 ? idx * SEG_DUR : 0) + 0.45;
+      try { narrVid.currentTime = start; } catch (_) {}
+      narrVid.play().catch(() => {});
+      lastGesture = gesture;
+    }
+  }
+
+  function drawNarrator(c, t, gesture, cue) {
+    if (new URLSearchParams(location.search).get('noNarrator') === '1') return;
+    // soft glow pedestal
+    const baseX = 28;
+    const targetH = 310;
+    const glowX = baseX + 120;
+    const glowY = H - 180;
+    c.save();
+    const vg = c.createRadialGradient(glowX, glowY, 10, glowX, glowY, 150);
+    vg.addColorStop(0, 'rgba(34,211,238,0.22)');
+    vg.addColorStop(0.55, 'rgba(167,139,250,0.08)');
+    vg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = vg;
+    c.beginPath();
+    c.arc(glowX, glowY, 150, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    syncNarratorVideo(t, gesture, cue);
+
+    let drew = false;
+    if (useNarrVideo && narrVid && narrVid.readyState >= 2 && GESTURE_SEG[gesture] >= 0) {
+      // draw video frame (VP9 alpha supported in Chrome)
+      const vw = narrVid.videoWidth || 864;
+      const vh = narrVid.videoHeight || 480;
+      const scale = targetH / vh;
+      const dw = vw * scale;
+      const dh = targetH;
+      const bob = Math.sin(t * 2.2) * 3;
+      // mouth energy (simple) when talking-like gestures
+      let sy = 1;
+      if (gesture === 'talk' || gesture === 'explain' || gesture === 'emphasize') {
+        sy = 1 + 0.012 * Math.sin(t * 14);
+      }
+      c.save();
+      c.translate(baseX + dw * 0.42, H - 78 + bob);
+      c.scale(1, sy);
+      c.drawImage(narrVid, -dw * 0.42, -dh, dw, dh);
+      c.restore();
+      drew = true;
+    }
+
+    if (!drew) {
+      const key = gesture === 'emphasize' ? 'emphasize' : gesture;
+      const img = sprites[key] || sprites.auth || sprites.idle;
+      if (!img) return;
+      const scale = targetH / img.height;
+      const dw = img.width * scale;
+      const dh = targetH;
+      let bob = Math.sin(t * 2.4) * 4;
+      let rot = Math.sin(t * 1.6) * 0.02;
+      let sx = 1, sy = 1, lean = 0;
+      switch (gesture) {
+        case 'wave': bob = Math.sin(t * 5) * 5; rot = Math.sin(t * 6) * 0.05; break;
+        case 'talk': bob = Math.sin(t * 3.2) * 3; sy = 1 + Math.sin(t * 10) * 0.018; break;
+        case 'point': lean = 0.05; break;
+        case 'nod': rot = Math.sin(t * 5) * 0.08; bob = Math.abs(Math.sin(t * 5)) * -6; break;
+        case 'emphasize': sx = 1 + Math.sin(t * 7) * 0.04; sy = 1 - Math.sin(t * 7) * 0.02; break;
+      }
+      c.save();
+      c.translate(baseX + dw / 2, H - 78 + bob);
+      c.rotate(rot + lean);
+      c.scale(sx, sy);
+      c.drawImage(img, -dw / 2, -dh, dw, dh);
+      c.restore();
+    }
+  }
+
+  function drawSubs(c, text) {
+    if (!text) return;
+    c.save();
+    c.font = `700 24px ${FONT}`;
+    const maxW = W - 320; // leave room for narrator left
+    const lines = wrapText(c, text, maxW);
+    const lineH = 34;
+    const padX = 22, padY = 14;
+    const tw = Math.min(maxW, Math.max(...lines.map(l => c.measureText(l).width)) + padX * 2);
+    const th = lines.length * lineH + padY * 2 - 6;
+    const x = (W - tw) / 2 + 40; // slight right bias away from narrator
+    const y = H - th - 36; // safe area above bottom
+    roundRect(c, x, y, tw, th, 12);
+    c.fillStyle = 'rgba(2, 6, 23, 0.78)';
+    c.fill();
+    c.strokeStyle = 'rgba(34,211,238,0.4)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.fillStyle = '#f8fafc';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    lines.forEach((ln, i) => {
+      c.fillText(ln, x + tw / 2, y + padY + lineH * i + lineH / 2 - 2, tw - padX * 2);
+    });
+    c.restore();
+  }
+
+  function drawFrame(t) {
+    const cue = cueAt(t);
+    const scene = (cue && cue.scene) || 'intro';
+    const gesture = (cue && cue.gesture) || 'idle';
+    const text = (cue && cue.text) || '';
+
+    drawBg(ctx, t, scene);
+    updateParticles(t);
+    drawParticles(ctx);
+    drawScene(ctx, scene, t, cue);
+    drawSceneLabel(ctx, scene);
+    drawNarrator(ctx, t, gesture, cue);
+    drawSubs(ctx, text);
+
+    ctx.fillStyle = 'rgba(148,163,184,0.5)';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(t.toFixed(1) + 's / ' + DURATION.toFixed(1) + 's', W - 24, 28);
+  }
+
+  function nowTime() {
+    if (renderMode) return pausedAt;
+    if (!playing) return pausedAt;
+    if (audio && !audio.paused && isFinite(audio.currentTime)) {
+      return Math.min(DURATION, audio.currentTime);
+    }
+    return Math.min(DURATION, (performance.now() - t0) / 1000);
+  }
+
+  // Public seek API for Playwright deterministic render
+  async function seek(t) {
+    renderMode = true;
+    playing = false;
+    pausedAt = Math.max(0, Math.min(DURATION, t));
+    const cue = cueAt(pausedAt);
+    const gesture = (cue && cue.gesture) || 'idle';
+    syncNarratorVideo(pausedAt, gesture, cue);
+    // wait a tick for video seek
+    if (useNarrVideo && narrVid) {
+      await new Promise((r) => {
+        const done = () => r();
+        if (narrVid.seeking) narrVid.addEventListener('seeked', done, { once: true });
+        else setTimeout(done, 16);
+        setTimeout(done, 120);
+      });
+    }
+    drawFrame(pausedAt);
+    return pausedAt;
+  }
+
+  window.__explainer = {
+    seek,
+    duration: DURATION,
+    fps: FPS,
+    width: W,
+    height: H,
+    canvas: view,
+    getTime: () => pausedAt,
+    ready: false
+  };
+
+  let lastTs = performance.now();
+  function loop(ts) {
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+    if (!renderMode) {
+      let t = nowTime();
+      if (playing && t >= DURATION) {
+        playing = false;
+        pausedAt = DURATION;
+        if (audio) { try { audio.pause(); } catch (_) {} }
+        btnPlay.textContent = '重播';
+        if (recording) stopRecording();
+      }
+      drawFrame(t);
+      statusEl.textContent = playing
+        ? `播放中 ${t.toFixed(1)}s · ${cueAt(t)?.scene || ''} · ${useNarrVideo ? 'RH手势' : '精灵'}`
+        : (t > 0 ? `暂停 ${t.toFixed(1)}s` : '就绪 · Explainer v2');
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function play() {
+    renderMode = false;
+    if (playing) {
+      playing = false;
+      pausedAt = nowTime();
+      if (audio) audio.pause();
+      if (narrVid) narrVid.pause();
+      btnPlay.textContent = '继续';
+      return;
+    }
+    if (pausedAt >= DURATION - 0.05) {
+      pausedAt = 0;
+      lastGesture = null;
+    }
+    playing = true;
+    t0 = performance.now() - pausedAt * 1000;
+    if (audio) {
+      audio.currentTime = pausedAt;
+      audio.play().catch(() => {});
+    }
+    btnPlay.textContent = '暂停';
+  }
+
+  function startRecording() {
+    if (recording) return;
+    recordedChunks = [];
+    const stream = view.captureStream(30);
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx && audio) {
+        const actx = new AudioCtx();
+        const src = actx.createMediaElementSource(audio);
+        const dest = actx.createMediaStreamDestination();
+        src.connect(dest);
+        src.connect(actx.destination);
+        dest.stream.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+      }
+    } catch (_) {}
+    let mime = 'video/webm;codecs=vp9,opus';
+    if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8,opus';
+    if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 7_000_000 });
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'unity-ta-explainer-v2.webm';
+      a.click();
+      statusEl.textContent = '录制完成 · 已下载 WebM';
+    };
+    mediaRecorder.start(200);
+    recording = true;
+    btnRecord.textContent = '停止录制';
+    pausedAt = 0;
+    lastGesture = null;
+    if (!playing) play();
+  }
+
+  function stopRecording() {
+    if (!recording || !mediaRecorder) return;
+    recording = false;
+    try { mediaRecorder.stop(); } catch (_) {}
+    btnRecord.textContent = '录制 WebM';
+  }
+
+  btnPlay.addEventListener('click', (e) => { e.stopPropagation(); play(); });
+  btnRecord.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (recording) stopRecording();
+    else startRecording();
+  });
+  view.addEventListener('click', () => play());
+
+  (async () => {
+    await Promise.all([loadSprites(), loadCues()]);
+    useNarrVideo = await waitVideoReady(narrVid, 10000);
+    if (useNarrVideo) {
+      try { narrVid.currentTime = 0.05; } catch (_) {}
+    }
+    window.__explainer.ready = true;
+    window.__explainer.useNarrVideo = useNarrVideo;
+    statusEl.textContent = useNarrVideo
+      ? '就绪 · v2 · RH 透明手势条 + 程序化主舞台'
+      : '就绪 · v2 · 姿态精灵回退';
+    drawFrame(0);
+    requestAnimationFrame(loop);
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('autoplay') === '1') setTimeout(() => play(), 300);
+    if (params.get('record') === '1') setTimeout(() => startRecording(), 500);
+  })().catch((err) => {
+    statusEl.textContent = '加载失败: ' + err.message;
+    console.error(err);
+  });
+})();
+</script>
+</body>
+</html>

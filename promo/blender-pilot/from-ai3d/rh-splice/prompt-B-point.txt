@@ -1,0 +1,7 @@
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 6.00-second mark of the target video.
+
+integrated_multimodal_description: [Shot 1] 2D-animated anime chibi, soft cel shading, clean opaque lineart, solid colors no transparency. A medium full-body shot frames a Q-proportioned young female lecturer facing camera on a plain light-gray studio backdrop #E4E4E4. Messy silver-white long hair, light gray-blue eyes, silver cross necklace, black turtleneck, long black asymmetrical techwear coat, black tactical pants, chunky black boots. Right hand holds a thin light pointer; left arm cradles a light-blue hardcover book against the chest. Opening pose must match <Picture 1> exactly; closing pose must match <Picture 2> exactly (same idle). The camera holds a static shot for the full 6.00 seconds; single shot only, no cuts. From 0.00 to 1.00 seconds she stays in the idle of <Picture 1> with only tiny breathing. Between 1.00 and 3.80 seconds she extends the pointer toward upper-right of frame and holds briefly. Between 3.80 and 6.00 seconds she retracts the arm to the exact idle of <Picture 2>. Keep identity, black coat opacity, hairstyle, props, and background continuous; no washed-out white body, no ghosting, no transparent clothing.
+
+overall_soundscape: Soft studio room tone with quiet cloth rustle timed to motion; no speech.
+
+non_diegetic_music: N/A

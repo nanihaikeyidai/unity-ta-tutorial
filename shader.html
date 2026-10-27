@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shader 技术 · Unity TA 学堂</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-fx" aria-hidden="true"></div>
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark">TA</span> Unity TA 学堂</a>
+      <button class="menu-btn" type="button" aria-label="菜单">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="urp.html">URP 管线</a></li>
+        <li><a href="perf.html">性能优化</a></li>
+        <li><a href="shader.html">Shader 技术</a></li>
+      </ul>
+      <a class="nav-cta" href="index.html">返回首页</a>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <header class="page-hero reveal">
+      <div class="breadcrumb"><a href="index.html">首页</a> / Shader 技术</div>
+      <h1>Shader 技术：把公式变成光影</h1>
+      <p class="lead">PBR 术语、法线贴图、Fresnel、Dissolve——每个概念配 Canvas 实时演示与对应 HLSL，方便对照 Shader Graph / 手写 URP。</p>
+    </header>
+
+    <div class="chapter-layout">
+      <aside class="toc reveal">
+        <h3>本课目录</h3>
+        <a href="#s1">01 · PBR 速通</a>
+        <a href="#s2">02 · 法线贴图</a>
+        <a href="#s3">03 · Fresnel</a>
+        <a href="#s4">04 · Dissolve</a>
+      </aside>
+
+      <main>
+        <article class="lesson reveal" id="s1">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 01</span>
+              <h2>PBR 速通：别被名词吓到</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-s1">播放讲解</button>
+          </div>
+          <div class="lesson-body stack">
+            <div class="prose" id="speech-s1" data-speech="基于物理的渲染，用几张贴图描述材质。Base Color 是反照率，Metallic 区分金属和绝缘体，Smoothness 控制高光锐利度，Normal 扰动法线，Emission 自发光，Ambient Occlusion 压暗缝隙。URP Lit 已经帮你接好 BRDF。TA 要盯的是：贴图作者向要对，数值落在合理区间，别靠拉高 Emission 去伪装光照。">
+              <p>PBR 用几张贴图描述材质——URP Lit 已接好 BRDF，TA 要保证<strong>作者向与数值区间</strong>正确。</p>
+              <ul>
+                <li><strong>Base Color</strong>：反照率，金属的彩色在这里，绝缘体避免过亮</li>
+                <li><strong>Metallic</strong>：0 绝缘体 / 1 金属（少用中间灰除非特殊）</li>
+                <li><strong>Smoothness</strong>：高光锐利度（= 1 − Roughness）</li>
+                <li><strong>Normal / AO / Emission</strong>：细节、缝隙、自发光</li>
+              </ul>
+              <div class="metaphor">🧱 隐喻：Base Color 是油漆颜色，Smoothness 是打磨程度，Metallic 是「这块到底是不是铁」。</div>
+              <div class="code-block">
+                <div class="code-bar"><span>URP Lit 输入心智</span><span>Checklist</span></div>
+                <pre>_BaseMap     <span class="cm">// sRGB</span>
+_BumpMap     <span class="cm">// 线性，不要当 sRGB</span>
+_Metallic    <span class="cm">// 0..1</span>
+_Smoothness  <span class="cm">// 0..1，越光滑高光越尖</span></pre>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="lesson reveal" id="s2">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 02</span>
+              <h2>法线贴图：平面上「骗」出凹凸</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-s2">播放讲解</button>
+          </div>
+          <div class="lesson-body">
+            <div class="prose" id="speech-s2" data-speech="法线贴图不改顶点几何，只在像素阶段替换或扰动法线方向，从而改变光照响应。所以轮廓还是平的，但明暗看起来像有砖缝。制作时注意：OpenGL 和 DirectX 的绿通道，可能是反的；导入 Unity 时，要标成 Normal map。右边演示用程序高度场重建法线，并让灯光绕行，你可以观察砖面明暗怎么变。">
+              <p>法线贴图<strong>不改顶点</strong>，只在像素阶段扰动法线 → 轮廓仍平，明暗却有砖缝。</p>
+              <ul>
+                <li>导入必须标 <strong>Normal map</strong></li>
+                <li>注意 OpenGL / DirectX 绿通道方向</li>
+                <li>强度过大 → 油腻反光；过小 → 像没贴</li>
+              </ul>
+              <div class="code-block">
+                <div class="code-bar"><span>Sample normal</span><span>HLSL</span></div>
+                <pre><span class="ty">float3</span> nTS = <span class="fn">UnpackNormal</span>(<span class="fn">SAMPLE_TEXTURE2D</span>(_BumpMap, sampler_BumpMap, uv));
+nTS.xy *= _BumpScale;
+<span class="ty">float3</span> nWS = <span class="fn">TransformTangentToWorld</span>(nTS, tangentWS);</pre>
+              </div>
+            </div>
+            <div class="demo-panel">
+              <div class="demo-bar"><span>🔴 Live · Normal Mapping</span></div>
+              <div class="demo-stage"><canvas id="demo-normal"></canvas></div>
+              <div class="demo-caption">黄点 = 灯光方向。几何是平面，明暗来自 per-pixel 法线。</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="lesson reveal" id="s3">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 03</span>
+              <h2>Fresnel：边缘为什么会亮</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-s3">播放讲解</button>
+          </div>
+          <div class="lesson-body">
+            <div class="prose" id="speech-s3" data-speech="菲涅尔效应，说的是视线掠过表面时，反射会变强。常见近似是：一减，法线点乘视线，再取幂。Power 越大，亮边越窄，越贴轮廓。角色遮罩、能量护盾、车漆，都很爱用它。拖右边的 Power，看边缘光一点点变窄。">
+              <p>视线掠过表面时反射变强 —— 常用近似：</p>
+              <p><code>Fresnel = pow(1 - saturate(dot(N, V)), Power)</code></p>
+              <div class="metaphor">🫧 隐喻：肥皂泡正对你几乎透明，侧过来才五彩反光——这就是菲涅尔。</div>
+              <ul>
+                <li>Power 大 → 亮边窄、贴轮廓</li>
+                <li>用途：护盾、描边光、车漆、皮肤边缘</li>
+              </ul>
+              <div class="code-block">
+                <div class="code-bar"><span>Fresnel rim</span><span>HLSL</span></div>
+                <pre><span class="ty">float</span> fresnel = <span class="fn">pow</span>(1.0 - <span class="fn">saturate</span>(<span class="fn">dot</span>(N, V)), _Power);
+<span class="ty">float3</span> col = lerp(baseCol, _RimColor.rgb, fresnel);</pre>
+              </div>
+            </div>
+            <div class="demo-panel">
+              <div class="demo-bar">
+                <span>🔴 Live · Fresnel Sphere</span>
+                <div class="demo-controls">
+                  <label>Power <input type="range" id="fresnel-power" min="1" max="8" step="0.1" value="3" /> <span id="fresnel-power-label">Power 3.0</span></label>
+                </div>
+              </div>
+              <div class="demo-stage"><canvas id="demo-fresnel"></canvas></div>
+              <div class="demo-caption">提高 Power：亮边变窄。灯光缓慢旋转以显示漫反射与边缘分离。</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="lesson reveal" id="s4">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 04</span>
+              <h2>Dissolve：噪声剪裁 + 灼烧边缘</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-s4">播放讲解</button>
+          </div>
+          <div class="lesson-body">
+            <div class="prose" id="speech-s4" data-speech="溶解效果通常采样一张噪声，和阈值比较，小于阈值的像素被 clip 掉。再在阈值附近做一条亮边，就有灼烧感。URP 里既可用 Shader Graph 的 Step 和 Clip，也可手写 HLSL。提醒一下：clip 会破坏一部分 Early-Z 优化，大面积溶解时，留意 overlap。">
+              <p>采样噪声，与阈值比较，<code>clip</code> 掉低于阈值的像素；阈值附近加亮边 = 灼烧感。</p>
+              <ul>
+                <li>噪声分辨率与 tiling 决定「块」大小</li>
+                <li>边缘宽度用 <code>smoothstep</code> 做软硬</li>
+                <li><code>clip</code> 可能影响 Early-Z，大面积慎用</li>
+              </ul>
+              <div class="code-block">
+                <div class="code-bar"><span>Dissolve</span><span>HLSL</span></div>
+                <pre><span class="ty">float</span> n = <span class="fn">SAMPLE_TEXTURE2D</span>(_Noise, sampler_Noise, uv).r;
+<span class="fn">clip</span>(n - _Threshold);
+<span class="ty">float</span> edge = <span class="fn">smoothstep</span>(_Threshold, _Threshold + _Edge, n);
+col = <span class="fn">lerp</span>(_BurnColor, col, edge);</pre>
+              </div>
+            </div>
+            <div class="demo-panel">
+              <div class="demo-bar">
+                <span>🔴 Live · Dissolve</span>
+                <div class="demo-controls">
+                  <label>Amount <input type="range" id="dissolve-amount" min="0" max="1" step="0.01" value="0.45" /> <span id="dissolve-label">Dissolve 0.45</span></label>
+                </div>
+              </div>
+              <div class="demo-stage"><canvas id="demo-dissolve"></canvas></div>
+              <div class="demo-caption">自动来回溶解；拖动滑杆可接管。亮边 = burn edge。</div>
+            </div>
+          </div>
+        </article>
+
+        <div class="next-chapter reveal">
+          <div>
+            <h3>学完三章 · 回到地图</h3>
+            <p>建议你在本机 Unity 工程里：复制一课的 Feature / Shader 片段，对着 Frame Debugger 验证。</p>
+          </div>
+          <a class="btn btn-primary" href="index.html">返回首页</a>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="wrap">Unity TA 实战学堂 · Shader 技术</div></footer>
+  <script src="js/app.js"></script>
+  <script src="js/voice.js"></script>
+  <script src="js/demos/normalmap.js"></script>
+  <script src="js/demos/fresnel.js"></script>
+  <script src="js/demos/dissolve.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# deps / caches
+node_modules/
+.venv*/
+__pycache__/
+.DS_Store
+*.pyc
+
+# render scratch
+_render*/
+**/frames/
+promo/_render*/
+promo/playbook-60s/_render*/
+promo/playbook-60s/node_modules/
+
+# heavy alpha / gesture library (keep local)
+*.mov
+char-alpha.*
+spliced-5.mp4
+seg-*.mp4
+promo/blender-pilot/**/preview/
+promo/infinitetalk/out/*-alpha.*
+promo/infinitetalk/out/*-padded.*
+
+# older / oversized masters not needed for playbook
+promo/unity-ta-explainer-2d.mp4
+promo/unity-ta-explainer-2d.webm
+promo/unity-ta-explainer-60s.mp4
+promo/unity-ta-explainer-60s.webm
+promo/narration-edge-tts.mp3
+promo/narration.mp3
+promo/narration-indextts.flac
+promo/playbook-60s/narration-indextts-source.flac
+
+# blender-pilot heavy / non-essential trees
+promo/blender-pilot/from-trellis/
+promo/blender-pilot/out/
+promo/blender-pilot/from-ai3d/preview/
+promo/blender-pilot/from-ai3d/*.png
+promo/blender-pilot/from-ai3d/rh-splice/explainer-with-narrator-alpha.mp4
+promo/blender-pilot/from-ai3d/rh-splice/a-frames/
+promo/blender-pilot/from-ai3d/rh-splice/alpha-test/
+promo/char-anim/
+promo/ta-narrator-rive/
+
+# site / other large optional
+blender/
+audio/ref/
+*.blend
+*.blend1
+scripts/*.log

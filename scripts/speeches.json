@@ -1,0 +1,16 @@
+{
+  "speech-intro": "欢迎来到 Unity 技术美术实战学堂。咱们分三条主线来学：URP 管线、性能优化，还有 Shader 技术。每一课都配了程序动画演示，旁边有讲解按钮，点一下就能听。建议先从 URP 第一章开始，把管线心智模型建起来，再往性能和着色器细节里钻。",
+  "speech-l1": "先看 URP 的渲染流程。较新版本默认走 Forward Plus。你可以把它想成一条工厂流水线：先剔除看不见的物体，再画阴影图，可选深度预通道，接着把灯光按屏幕空间分簇，然后画不透明、天空、透明，最后做后处理。跟经典 Forward 比，灯光不再粗暴按数量卡死，而是按像素附近的灯光列表来采样。所以中等规模、多光源的场景，会友好很多。",
+  "speech-l2": "想扩展 URP，第一公民是 Renderer Feature。你不用去 fork 整条管线。只要在 Universal Renderer Data 上挂一个 Feature，就能在指定时机注入 Scriptable Render Pass。比如描边、全屏 Blit、自定义后效，都行。记住两点：注入时机，决定你能读写哪些纹理；Feature 的顺序，大致就是 Pass 的顺序。",
+  "speech-l3": "灯光和阴影这块，主方向光通常只有一盏，真正走完整阴影级联。附加光有数量和阴影预算。Forward Plus 用聚类减轻多灯压力，但阴影图分辨率、级联数量、软阴影采样，照样吃带宽。TA 日常怎么查？用 Frame Debugger 看 ShadowCaster pass 次数，再用灯光层和 Culling Mask，把无关物体剔出阴影。",
+  "speech-l4": "后处理看着炫，代价也不小。Bloom、Color Grading、Vignette、AO、景深，全是全屏或近全屏操作。URP 的 Volume 按优先级混合，但每个开启的效果，都在吃填充率。移动端建议：优先保留 Tonemapping 和轻微 Bloom，慎开 SSAO 和重景深。TA 要会读 Profiler 里的 PostProcessing 条目，而不是只调好看。",
+  "speech-l5": "Camera Stack 怎么用？Base Camera 负责清屏和主场景，Overlay Camera 把 UI 或特效叠上去。Stack 能避免 UI 被后处理污染，也能让世界空间特效和 Screen Space UI 分层。代价是多一次提交，还有可能的渲染目标切换。常见坑有三个：Overlay 误开后处理、深度不清导致 UI 被挡、HDR 和 LDR 混叠。",
+  "speech-p1": "SRP Batcher 优化的，不是三角形数量，而是 CPU 上 SetPass 和常量缓冲区更新的开销。前提是：Shader 声明了 UnityPerMaterial、UnityPerDraw 这类兼容的 CBUFFER，材质也没有乱开关键字、把批处理打散。同 Shader 变体下的多个材质，可以共享大部分提交。右边演示可以开关 Batcher，观察 Draw Call 示意数量的变化。",
+  "speech-p2": "场景里大量相同网格，只是变换或少量属性不同，这时候该上 GPU Instancing。一次提交，就能画出成千上万个实例。它和 SRP Batcher 解决的痛点不一样：Batcher 优化多材质同变体，Instancing 优化同网格同材质的海量复制。草、碎石、观众席座椅，都是典型场景。注意两点：Shader 要写好实例化宏，不要在 CPU 侧每帧 new 矩阵数组。",
+  "speech-p3": "Overdraw 是什么？同一个屏幕像素，一帧里被写入多次。半透明粒子、叠加 UI、大面积 Alpha Blend 特效，都是重灾区。移动端填充率很宝贵，热区发白，就该砍层数、缩小粒子，或者改用预乘和更狠的裁剪。右边热力图可以调透明层数，颜色越热，浪费越严重。",
+  "speech-p4": "优化之前，先定性瓶颈。是 CPU 游戏逻辑，还是 CPU 渲染提交，还是 GPU 受限？Profiler 时间线、Frame Debugger、Rendering Debugger，是三件套。LOD 用距离换面数，但切换要避免爆闪。移动端还要盯内存带宽，贴图压缩和图集同等重要。记一句口诀：先量再砍，先大后小，先频率后常量。",
+  "speech-s1": "基于物理的渲染，用几张贴图描述材质。Base Color 是反照率，Metallic 区分金属和绝缘体，Smoothness 控制高光锐利度，Normal 扰动法线，Emission 自发光，Ambient Occlusion 压暗缝隙。URP Lit 已经帮你接好 BRDF。TA 要盯的是：贴图作者向要对，数值落在合理区间，别靠拉高 Emission 去伪装光照。",
+  "speech-s2": "法线贴图不改顶点几何，只在像素阶段替换或扰动法线方向，从而改变光照响应。所以轮廓还是平的，但明暗看起来像有砖缝。制作时注意：OpenGL 和 DirectX 的绿通道，可能是反的；导入 Unity 时，要标成 Normal map。右边演示用程序高度场重建法线，并让灯光绕行，你可以观察砖面明暗怎么变。",
+  "speech-s3": "菲涅尔效应，说的是视线掠过表面时，反射会变强。常见近似是：一减，法线点乘视线，再取幂。Power 越大，亮边越窄，越贴轮廓。角色遮罩、能量护盾、车漆，都很爱用它。拖右边的 Power，看边缘光一点点变窄。",
+  "speech-s4": "溶解效果通常采样一张噪声，和阈值比较，小于阈值的像素被 clip 掉。再在阈值附近做一条亮边，就有灼烧感。URP 里既可用 Shader Graph 的 Step 和 Clip，也可手写 HLSL。提醒一下：clip 会破坏一部分 Early-Z 优化，大面积溶解时，留意 overlap。"
+}

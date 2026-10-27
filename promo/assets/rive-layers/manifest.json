@@ -1,0 +1,188 @@
+{
+  "source": "/workspace/unity-ta-tutorial/promo/assets/pose-idle.png",
+  "canvas": [
+    1024,
+    1024
+  ],
+  "character_bbox": [
+    255,
+    34,
+    452,
+    954
+  ],
+  "layers": [
+    {
+      "filename": "00-torso.png",
+      "crop_filename": "00-torso-crop.png",
+      "full_canvas": [
+        1024,
+        1024
+      ],
+      "content_bbox": [
+        255,
+        176,
+        452,
+        812
+      ],
+      "crop_bbox_on_canvas": [
+        253,
+        174,
+        456,
+        816
+      ],
+      "pivot_frac": [
+        0.5,
+        0.62
+      ],
+      "pivot_px": [
+        512.0,
+        634.9
+      ],
+      "nonzero_pixels": 37057
+    },
+    {
+      "filename": "01-head.png",
+      "crop_filename": "01-head-crop.png",
+      "full_canvas": [
+        1024,
+        1024
+      ],
+      "content_bbox": [
+        276,
+        34,
+        430,
+        515
+      ],
+      "crop_bbox_on_canvas": [
+        274,
+        32,
+        434,
+        519
+      ],
+      "pivot_frac": [
+        0.5,
+        0.41
+      ],
+      "pivot_px": [
+        512.0,
+        419.8
+      ],
+      "nonzero_pixels": 105779
+    },
+    {
+      "filename": "02-arm-r.png",
+      "crop_filename": "02-arm-r-crop.png",
+      "full_canvas": [
+        1024,
+        1024
+      ],
+      "content_bbox": [
+        255,
+        176,
+        228,
+        374
+      ],
+      "crop_bbox_on_canvas": [
+        253,
+        174,
+        232,
+        378
+      ],
+      "pivot_frac": [
+        0.44,
+        0.43
+      ],
+      "pivot_px": [
+        450.6,
+        440.3
+      ],
+      "nonzero_pixels": 8096
+    },
+    {
+      "filename": "03-arm-l.png",
+      "crop_filename": "03-arm-l-crop.png",
+      "full_canvas": [
+        1024,
+        1024
+      ],
+      "content_bbox": [
+        491,
+        378,
+        216,
+        265
+      ],
+      "crop_bbox_on_canvas": [
+        489,
+        376,
+        220,
+        269
+      ],
+      "pivot_frac": [
+        0.56,
+        0.43
+      ],
+      "pivot_px": [
+        573.4,
+        440.3
+      ],
+      "nonzero_pixels": 17725
+    },
+    {
+      "filename": "04-pointer.png",
+      "crop_filename": "04-pointer-crop.png",
+      "full_canvas": [
+        1024,
+        1024
+      ],
+      "content_bbox": [
+        255,
+        176,
+        92,
+        273
+      ],
+      "crop_bbox_on_canvas": [
+        253,
+        174,
+        96,
+        277
+      ],
+      "pivot_frac": [
+        0.34,
+        0.44
+      ],
+      "pivot_px": [
+        348.2,
+        450.6
+      ],
+      "nonzero_pixels": 2951
+    }
+  ],
+  "bone_hierarchy": [
+    "root",
+    "  hip",
+    "    torso",
+    "      neck",
+    "        head",
+    "      shoulderL",
+    "        armL  (+ book)",
+    "      shoulderR",
+    "        armR",
+    "          hand",
+    "            pointer"
+  ],
+  "state_machine_targets": [
+    "idle",
+    "talk",
+    "wave",
+    "point",
+    "nod",
+    "emphasize"
+  ],
+  "notes": [
+    "Character faces camera: character RIGHT arm = screen LEFT (pointer); character LEFT = screen RIGHT (book).",
+    "Soft feathered overlaps at neck and shoulders intentionally left for Rive joints.",
+    "Hair hanging over shoulders lives on head layer; torso may show a soft gap there when head is moved.",
+    "Book kept with left arm (03-arm-l); separating would expose missing sleeve underside.",
+    "04-pointer.png exported (2951 px); can parent under armR hand"
+  ]
+}

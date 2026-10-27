@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unity TA 实战学堂 · URP · 性能 · Shader</title>
+  <meta name="description" content="面向技术美术的 Unity URP 管线、性能优化与 Shader 互动教程，含程序动画演示与中文语音讲解。" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-fx" aria-hidden="true"></div>
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html">
+        <span class="logo-mark">TA</span>
+        Unity TA 学堂
+      </a>
+      <button class="menu-btn" type="button" aria-label="菜单">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="urp.html">URP 管线</a></li>
+        <li><a href="perf.html">性能优化</a></li>
+        <li><a href="shader.html">Shader 技术</a></li>
+      </ul>
+      <a class="nav-cta" href="urp.html">开始学习 →</a>
+    </div>
+  </nav>
+
+
+    <section class="welcome-hero" aria-label="欢迎">
+      <div class="welcome-media" aria-hidden="true">
+        <video class="welcome-video"
+               autoplay muted loop playsinline
+               poster="media/welcome-car-poster.jpg"
+               preload="metadata">
+          <source src="media/welcome-car.webm" type="video/webm" />
+          <source src="media/welcome-car.mp4" type="video/mp4" />
+        </video>
+        <div class="welcome-veil"></div>
+      </div>
+      <div class="welcome-content wrap">
+        <div class="badge"><span class="badge-dot"></span> Welcome · Blender 程序车模</div>
+        <h1 class="welcome-title">欢迎来到 <span class="grad">Unity TA 教程</span></h1>
+        <p class="welcome-sub">
+          URP 管线 · 性能优化 · Shader 技术——用看得见的动画与中文语音，把 TA 核心能力讲清楚。
+        </p>
+        <div class="hero-actions welcome-actions">
+          <a class="btn btn-primary" href="urp.html">开始学习 URP</a>
+          <button class="btn btn-voice" type="button" data-voice="speech-intro">播放导览讲解</button>
+          <a class="btn btn-ghost" href="#courses">课程地图</a>
+        </div>
+      </div>
+    </section>
+
+  <div class="wrap">
+    <header class="hero" id="intro">
+      <div class="badge"><span class="badge-dot"></span> v1.0 · 互动演示 + 语音讲解</div>
+      <h1>把渲染管线<br /><span class="grad">讲成你能「看见」的东西</span></h1>
+      <p class="hero-lead">
+        专为 Unity 技术美术打造的中文教程站：URP Forward+、SRP Batcher、Overdraw、Fresnel / Dissolve……
+        每一课都有程序动画特效与一键语音讲解，边看边听边理解。
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="urp.html">进入 URP 第一章</a>
+        <button class="btn btn-voice" type="button" data-voice="speech-intro">播放导览讲解</button>
+        <a class="btn btn-ghost" href="#courses">查看课程地图</a>
+      </div>
+      <div id="speech-intro" hidden data-speech="欢迎来到 Unity 技术美术实战学堂。咱们分三条主线来学：URP 管线、性能优化，还有 Shader 技术。每一课都配了程序动画演示，旁边有讲解按钮，点一下就能听。建议先从 URP 第一章开始，把管线心智模型建起来，再往性能和着色器细节里钻。"></div>
+      <div class="hero-stats">
+        <div class="stat"><div class="stat-num">3</div><div class="stat-label">核心章节</div></div>
+        <div class="stat"><div class="stat-num">12+</div><div class="stat-label">互动演示</div></div>
+        <div class="stat"><div class="stat-num">中文</div><div class="stat-label">语音讲解</div></div>
+      </div>
+    </header>
+
+    <section class="section" id="courses">
+      <div class="section-head reveal">
+        <div class="section-eyebrow">Course Map</div>
+        <h2>课程地图</h2>
+        <p>三条主线互相咬合：先懂管线怎么走，再懂帧预算怎么省，最后用 Shader 把画面做出来。</p>
+      </div>
+      <div class="course-grid">
+        <a class="course-card reveal" href="urp.html">
+          <div class="course-icon">🔷</div>
+          <h3>URP 管线</h3>
+          <p>Forward+、Renderer Feature、灯光与后处理、Camera Stack——把 URP 当成一条可编排的流水线。</p>
+          <div class="course-meta">
+            <span class="tag">5 课</span>
+            <span class="tag">管线动画</span>
+            <span class="tag">~25 min</span>
+          </div>
+        </a>
+        <a class="course-card reveal" href="perf.html">
+          <div class="course-icon">⚡</div>
+          <h3>性能优化</h3>
+          <p>SRP Batcher、GPU Instancing、LOD、Overdraw 热力图——用「看得见的浪费」建立 Profiler 直觉。</p>
+          <div class="course-meta">
+            <span class="tag">4 课</span>
+            <span class="tag">热力演示</span>
+            <span class="tag">~20 min</span>
+          </div>
+        </a>
+        <a class="course-card reveal" href="shader.html">
+          <div class="course-icon">✨</div>
+          <h3>Shader 技术</h3>
+          <p>PBR 术语、法线贴图、Fresnel 边缘光、Dissolve 溶解——Canvas 实时演示对应 HLSL 公式。</p>
+          <div class="course-meta">
+            <span class="tag">4 课</span>
+            <span class="tag">公式可视化</span>
+            <span class="tag">~25 min</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="features reveal">
+        <div class="feature">
+          <div class="feature-icon">🎙️</div>
+          <h4>语音讲解</h4>
+          <p>每课「播放讲解」按钮，浏览器 Web Speech，中文朗读，可随时暂停。</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎬</div>
+          <h4>程序动画</h4>
+          <p>管线跑马灯、Overdraw 热力、Fresnel 球体——概念直接画在屏幕上。</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🧩</div>
+          <h4>代码对照</h4>
+          <p>关键节点附带 C# / HLSL 片段，讲解与工程实践对齐。</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🌙</div>
+          <h4>深色科技风</h4>
+          <p>青紫点缀玻璃拟态，专注阅读与演示，适合长时间学习。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal">
+      <div class="section-head">
+        <div class="section-eyebrow">How to use</div>
+        <h2>推荐学习路径</h2>
+      </div>
+      <div class="prose" style="max-width:720px">
+        <ol>
+          <li><strong>URP · Forward+</strong>：先看管线动画，建立「一帧里发生了什么」的顺序感。</li>
+          <li><strong>性能 · Batcher / Overdraw</strong>：同一套场景，理解 CPU 提交与 GPU 填充率两个瓶颈。</li>
+          <li><strong>Shader · Fresnel / Dissolve</strong>：把数学写成画面，再对照 HLSL 片段落地到 URP Unlit / Lit。</li>
+        </ol>
+        <p style="margin-top:16px">本站为纯静态页面，无需后端。语音依赖本机浏览器的语音引擎（推荐 Chrome / Edge）。</p>
+      </div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <div class="wrap">
+      Unity TA 实战学堂 · v1.0 · 仅供学习验收 ·
+      <a href="DESIGN.md">设计说明</a> ·
+      <a href="README.md">README</a>
+    </div>
+  </footer>
+
+  <script src="js/app.js"></script>
+  <script src="js/voice.js"></script>
+</body>
+</html>

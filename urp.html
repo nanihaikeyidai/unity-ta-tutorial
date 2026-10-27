@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>URP 管线 · Unity TA 学堂</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-fx" aria-hidden="true"></div>
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark">TA</span> Unity TA 学堂</a>
+      <button class="menu-btn" type="button" aria-label="菜单">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="urp.html">URP 管线</a></li>
+        <li><a href="perf.html">性能优化</a></li>
+        <li><a href="shader.html">Shader 技术</a></li>
+      </ul>
+      <a class="nav-cta" href="perf.html">下一章：性能 →</a>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <header class="page-hero reveal">
+      <div class="breadcrumb"><a href="index.html">首页</a> / URP 管线</div>
+      <h1>URP 管线：把一帧拆开看</h1>
+      <p class="lead">Universal Render Pipeline 不是「一个黑盒开关」，而是一条可插入、可裁剪的渲染流水线。本章用动画把 Forward+ 的顺序、Renderer Feature 的挂载点讲清楚。</p>
+    </header>
+
+    <div class="chapter-layout">
+      <aside class="toc reveal">
+        <h3>本课目录</h3>
+        <a href="#l1">01 · Forward+ 概览</a>
+        <a href="#l2">02 · Renderer Features</a>
+        <a href="#l3">03 · 灯光与阴影</a>
+        <a href="#l4">04 · 后处理</a>
+        <a href="#l5">05 · Camera Stack</a>
+      </aside>
+
+      <main>
+        <!-- L1 -->
+        <article class="lesson reveal" id="l1">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 01</span>
+              <h2>Forward+：一帧的流水线</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-l1">播放讲解</button>
+          </div>
+          <div class="lesson-body">
+            <div class="prose" id="speech-l1" data-speech="先看 URP 的渲染流程。较新版本默认走 Forward Plus。你可以把它想成一条工厂流水线：先剔除看不见的物体，再画阴影图，可选深度预通道，接着把灯光按屏幕空间分簇，然后画不透明、天空、透明，最后做后处理。跟经典 Forward 比，灯光不再粗暴按数量卡死，而是按像素附近的灯光列表来采样。所以中等规模、多光源的场景，会友好很多。">
+              <p>URP 在较新版本默认走向 <strong>Forward+</strong>（Forward Plus）。你可以把它想成工厂流水线：</p>
+              <div class="metaphor">🏭 隐喻：每一帧 = 一条传送带。物体先过安检（Culling），再盖章（Shadow / Depth），再按货架分区取灯（Cluster），最后上色包装（Opaque → Post）。</div>
+              <ul>
+                <li><strong>Culling</strong>：视锥 + 遮挡，丢掉看不见的 Renderer</li>
+                <li><strong>Shadow Maps</strong>：主光 / 附加光阴影图</li>
+                <li><strong>Depth Prepass</strong>（可选）：先写深度，减少后续 overdraw</li>
+                <li><strong>Light Clustering</strong>：屏幕空间分簇，像素只采附近灯</li>
+                <li><strong>Opaque → Sky → Transparent → Post</strong></li>
+              </ul>
+              <p>和经典 Forward 的核心差别：灯光不再「整场景按数量硬顶」，而是按像素邻域取灯列表——中等规模多光源更友好。</p>
+            </div>
+            <div class="demo-panel">
+              <div class="demo-bar"><span>🔴 Live · Forward+ Pipeline</span></div>
+              <div class="demo-stage" id="demo-pipeline" style="aspect-ratio:auto;min-height:200px"></div>
+              <div class="demo-caption">节点会依次点亮，示意一帧内 Pass 的时间顺序（示意，非 Frame Debugger 实采）。</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- L2 -->
+        <article class="lesson reveal" id="l2">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 02</span>
+              <h2>Renderer Features：往流水线「插插座」</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-l2">播放讲解</button>
+          </div>
+          <div class="lesson-body">
+            <div class="prose" id="speech-l2" data-speech="想扩展 URP，第一公民是 Renderer Feature。你不用去 fork 整条管线。只要在 Universal Renderer Data 上挂一个 Feature，就能在指定时机注入 Scriptable Render Pass。比如描边、全屏 Blit、自定义后效，都行。记住两点：注入时机，决定你能读写哪些纹理；Feature 的顺序，大致就是 Pass 的顺序。">
+              <p><strong>Renderer Feature</strong> 是 URP 扩展渲染的第一公民。不必 fork 整条管线，在 <code>Universal Renderer Data</code> 上挂 Feature，即可在指定时机注入 <code>ScriptableRenderPass</code>。</p>
+              <div class="metaphor">🔌 隐喻：Renderer = 插线板。Feature = 插头。插错孔（错误的 RenderPassEvent）就会读到空 RT 或盖住不该盖的东西。</div>
+              <ul>
+                <li>描边 / 外轮廓：常在 Opaque 后、Sky 前</li>
+                <li>全屏 Blit：注意 <code>_CameraColorTexture</code> 是否已声明</li>
+                <li>顺序敏感：列表里 Feature 的上下 ≈ Pass 先后</li>
+              </ul>
+              <div class="code-block">
+                <div class="code-bar"><span>OutlineFeature.cs</span><span>C#</span></div>
+                <pre><span class="kw">public class</span> <span class="ty">OutlineFeature</span> : <span class="ty">ScriptableRendererFeature</span> {
+  <span class="kw">public override void</span> <span class="fn">AddRenderPasses</span>(
+      <span class="ty">ScriptableRenderer</span> renderer, <span class="kw">ref</span> <span class="ty">RenderingData</span> data) {
+    <span class="cm">// 选择注入时机</span>
+    _pass.renderPassEvent = <span class="ty">RenderPassEvent</span>.AfterRenderingOpaques;
+    renderer.<span class="fn">EnqueuePass</span>(_pass);
+  }
+}</pre>
+              </div>
+            </div>
+            <div class="demo-panel">
+              <div class="demo-bar"><span>🔴 Live · Feature Stack</span></div>
+              <div class="demo-stage"><canvas id="demo-rf"></canvas></div>
+              <div class="demo-caption">卡片上下浮动示意 Feature 层叠；描边 / Bloom 等作为独立 Pass 插入。</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- L3 -->
+        <article class="lesson reveal" id="l3">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 03</span>
+              <h2>灯光与阴影：主光一条，附加光一筐</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-l3">播放讲解</button>
+          </div>
+          <div class="lesson-body stack">
+            <div class="prose" id="speech-l3" data-speech="灯光和阴影这块，主方向光通常只有一盏，真正走完整阴影级联。附加光有数量和阴影预算。Forward Plus 用聚类减轻多灯压力，但阴影图分辨率、级联数量、软阴影采样，照样吃带宽。TA 日常怎么查？用 Frame Debugger 看 ShadowCaster pass 次数，再用灯光层和 Culling Mask，把无关物体剔出阴影。">
+              <p>URP 里<strong>主方向光</strong>通常一盏走完整阴影级联；附加光有数量与阴影预算。Forward+ 用聚类减轻多灯着色压力，但：</p>
+              <ul>
+                <li>阴影图分辨率 / 级联数 / 软阴影采样 → 直接吃带宽</li>
+                <li>用 <strong>Light Layer</strong> 与 Culling Mask 把无关物体剔出 ShadowCaster</li>
+                <li>移动端优先：少实时阴影，烘培 + 少量 blob</li>
+              </ul>
+              <div class="metaphor">🔦 隐喻：主光是太阳（贵但全球受益），附加光是台灯（多了要按桌分区供电——这就是 Cluster）。</div>
+              <div class="code-block">
+                <div class="code-bar"><span>URP Asset · 关键项心智</span><span>Checklist</span></div>
+                <pre><span class="cm">// 调阴影前先问三句：</span>
+<span class="cm">// 1. 这盏灯真的需要实时阴影吗？</span>
+<span class="cm">// 2. 级联能否从 4 降到 2？</span>
+<span class="cm">// 3. Shadow Distance 能否缩短到玩法可见范围？</span>
+MainLightShadows = <span class="kw">true</span>;
+AdditionalLightShadows = <span class="str">"按需"</span>;
+ShadowDistance = <span class="cm">/* 能短则短 */</span> 40;</pre>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- L4 -->
+        <article class="lesson reveal" id="l4">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 04</span>
+              <h2>后处理：美的代价是全屏带宽</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-l4">播放讲解</button>
+          </div>
+          <div class="lesson-body stack">
+            <div class="prose" id="speech-l4" data-speech="后处理看着炫，代价也不小。Bloom、Color Grading、Vignette、AO、景深，全是全屏或近全屏操作。URP 的 Volume 按优先级混合，但每个开启的效果，都在吃填充率。移动端建议：优先保留 Tonemapping 和轻微 Bloom，慎开 SSAO 和重景深。TA 要会读 Profiler 里的 PostProcessing 条目，而不是只调好看。">
+              <p>Bloom、Color Grading、Vignette、AO、DoF——多是<strong>全屏或近全屏</strong>操作。Volume 按优先级混合，但每个开启的效果都在吃填充率。</p>
+              <ul>
+                <li>移动端优先：Tonemapping + 轻 Bloom；慎开 SSAO / 重 DoF</li>
+                <li>Bloom 阈值比强度更伤性能</li>
+                <li>用 Volume Profile 分层：全局底子 / 区域覆盖 / 剧情镜头</li>
+              </ul>
+              <div class="metaphor">🎨 隐喻：后处理是「整张照片的滤镜」。滤镜越多，冲洗店越忙——GPU 同理。</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- L5 -->
+        <article class="lesson reveal" id="l5">
+          <div class="lesson-header">
+            <div>
+              <span class="lesson-num">LESSON 05</span>
+              <h2>Camera Stack：UI 与世界叠在一起</h2>
+            </div>
+            <button class="btn btn-voice" type="button" data-voice="speech-l5">播放讲解</button>
+          </div>
+          <div class="lesson-body stack">
+            <div class="prose" id="speech-l5" data-speech="Camera Stack 怎么用？Base Camera 负责清屏和主场景，Overlay Camera 把 UI 或特效叠上去。Stack 能避免 UI 被后处理污染，也能让世界空间特效和 Screen Space UI 分层。代价是多一次提交，还有可能的渲染目标切换。常见坑有三个：Overlay 误开后处理、深度不清导致 UI 被挡、HDR 和 LDR 混叠。">
+              <p><strong>Base Camera</strong> 清屏 + 主场景；<strong>Overlay Camera</strong> 把 UI / 特效叠上去。Stack 能避免 UI 被后处理污染，也能分层世界特效与 Screen Space UI。</p>
+              <ul>
+                <li>代价：多一次提交、可能的 RT 切换</li>
+                <li>坑：Overlay 误开 Post、深度不清 UI 被挡、HDR/LDR 混叠</li>
+                <li>UI Camera 通常关阴影、关后处理、清深度按需</li>
+              </ul>
+              <div class="code-block">
+                <div class="code-bar"><span>Camera setup</span><span>Checklist</span></div>
+                <pre>Base  : RenderType = Base,  Post = <span class="kw">true</span>,  Clear = Skybox
+Overlay: RenderType = Overlay, Post = <span class="kw">false</span>, ClearDepth = <span class="kw">true</span>
+<span class="cm">// Stack 顺序：先世界，后 UI</span></pre>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <div class="next-chapter reveal">
+          <div>
+            <h3>下一章 · 性能优化</h3>
+            <p>管线走通了，下一站用 Batcher 与 Overdraw 热力图看见浪费。</p>
+          </div>
+          <a class="btn btn-primary" href="perf.html">进入性能章 →</a>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="wrap">Unity TA 实战学堂 · URP 管线</div></footer>
+  <script src="js/app.js"></script>
+  <script src="js/voice.js"></script>
+  <script src="js/demos/pipeline.js"></script>
+  <script src="js/demos/renderer-features.js"></script>
+</body>
+</html>

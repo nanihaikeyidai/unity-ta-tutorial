@@ -1,0 +1,16 @@
+{
+  "name": "promo",
+  "version": "1.0.0",
+  "description": "程序化成片原型：**CSS + Canvas 2D only**，**无 Three.js / WebGL / 3D**。模型只用于静帧素材（银白发 Q 版讲解员），视频本身全部前端程序绘制。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

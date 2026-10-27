@@ -1,0 +1,6 @@
+[
+  {"id":"seg01","start":0.0,"end":7.4,"audio":"audio/seg01-0-7.4.wav","gestures":["wave","talk"]},
+  {"id":"seg02","start":7.4,"end":15.7,"audio":"audio/seg02-7.4-15.7.wav","gestures":["point","emphasize"]},
+  {"id":"seg03","start":15.7,"end":22.7,"audio":"audio/seg03-15.7-22.7.wav","gestures":["talk","nod"]},
+  {"id":"seg04","start":22.7,"end":30.1,"audio":"audio/seg04-22.7-30.1.wav","gestures":["point","wave"]}
+]

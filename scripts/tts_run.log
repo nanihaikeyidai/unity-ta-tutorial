@@ -1,0 +1,145 @@
+[speech-intro] starting (122 chars)...
+[speech-intro] taskId=2113865553323188226
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865553323188226 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-intro] got 1 file(s)
+[speech-intro] wrote /workspace/unity-ta-tutorial/audio/speech-intro.mp3 (179630 bytes)
+[speech-l1] starting (168 chars)...
+[speech-l1] taskId=2113865913752313858
+  poll task=2113865913752313858 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865913752313858 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865913752313858 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865913752313858 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865913752313858 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113865913752313858 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-l1] got 1 file(s)
+[speech-l1] wrote /workspace/unity-ta-tutorial/audio/speech-l1.mp3 (221472 bytes)
+[speech-l2] starting (189 chars)...
+[speech-l2] taskId=2113866116123283457
+  poll task=2113866116123283457 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866116123283457 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866116123283457 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866116123283457 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-l2] got 1 file(s)
+[speech-l2] wrote /workspace/unity-ta-tutorial/audio/speech-l2.mp3 (192240 bytes)
+[speech-l3] starting (168 chars)...
+[speech-l3] taskId=2113866279948615681
+  poll task=2113866279948615681 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866279948615681 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866279948615681 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866279948615681 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866279948615681 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866279948615681 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-l3] got 1 file(s)
+[speech-l3] wrote /workspace/unity-ta-tutorial/audio/speech-l3.mp3 (198021 bytes)
+[speech-l4] starting (186 chars)...
+[speech-l4] taskId=2113866473696100353
+  poll task=2113866473696100353 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866473696100353 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866473696100353 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866473696100353 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866473696100353 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-l4] got 1 file(s)
+[speech-l4] wrote /workspace/unity-ta-tutorial/audio/speech-l4.mp3 (194792 bytes)
+[speech-l5] starting (183 chars)...
+[speech-l5] taskId=2113866641174650881
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866641174650881 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-l5] got 1 file(s)
+[speech-l5] wrote /workspace/unity-ta-tutorial/audio/speech-l5.mp3 (185004 bytes)
+[speech-p1] starting (196 chars)...
+[speech-p1] taskId=2113866934855622658
+  poll task=2113866934855622658 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866934855622658 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866934855622658 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113866934855622658 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-p1] got 1 file(s)
+[speech-p1] wrote /workspace/unity-ta-tutorial/audio/speech-p1.mp3 (217780 bytes)
+[speech-p2] starting (185 chars)...
+[speech-p2] taskId=2113867075922649090
+  poll task=2113867075922649090 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867075922649090 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867075922649090 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867075922649090 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867075922649090 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-p2] got 1 file(s)
+[speech-p2] wrote /workspace/unity-ta-tutorial/audio/speech-p2.mp3 (231376 bytes)
+[speech-p3] starting (130 chars)...
+[speech-p3] taskId=2113867240335175682
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867240335175682 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-p3] got 1 file(s)
+[speech-p3] wrote /workspace/unity-ta-tutorial/audio/speech-p3.mp3 (180556 bytes)
+[speech-p4] starting (162 chars)...
+[speech-p4] taskId=2113867521194151938
+  poll task=2113867521194151938 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867521194151938 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867521194151938 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867521194151938 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-p4] got 1 file(s)
+[speech-p4] wrote /workspace/unity-ta-tutorial/audio/speech-p4.mp3 (208997 bytes)
+[speech-s1] starting (184 chars)...
+[speech-s1] taskId=2113867652450701314
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867652450701314 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-s1] got 1 file(s)
+[speech-s1] wrote /workspace/unity-ta-tutorial/audio/speech-s1.mp3 (204812 bytes)
+[speech-s2] starting (151 chars)...
+[speech-s2] taskId=2113867998480793601
+  poll task=2113867998480793601 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867998480793601 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867998480793601 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867998480793601 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113867998480793601 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-s2] got 1 file(s)
+[speech-s2] wrote /workspace/unity-ta-tutorial/audio/speech-s2.mp3 (215766 bytes)
+[speech-s3] starting (102 chars)...
+[speech-s3] taskId=2113868168190709761
+  poll task=2113868168190709761 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113868168190709761 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113868168190709761 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-s3] got 1 file(s)
+[speech-s3] wrote /workspace/unity-ta-tutorial/audio/speech-s3.mp3 (142362 bytes)
+[speech-s4] starting (145 chars)...
+[speech-s4] taskId=2113868293625565186
+  poll task=2113868293625565186 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113868293625565186 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113868293625565186 code=804 msg=APIKEY_TASK_IS_RUNNING
+  poll task=2113868293625565186 code=804 msg=APIKEY_TASK_IS_RUNNING
+[speech-s4] got 1 file(s)
+[speech-s4] wrote /workspace/unity-ta-tutorial/audio/speech-s4.mp3 (168885 bytes)
+DONE

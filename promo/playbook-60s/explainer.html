@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent Playbook · 60s Explainer</title>
+<style>
+  :root {
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+    --orange: #fb923c;
+    --warn: #fbbf24;
+    --bg: #050816;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #e2e8f0;
+  }
+  #stage-wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+  }
+  #view {
+    display: block;
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    background: var(--bg);
+    box-shadow: 0 0 60px rgba(34, 211, 238, 0.15);
+    cursor: pointer;
+  }
+  #controls {
+    position: fixed; right: 16px; bottom: 16px; z-index: 20;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+  }
+  #controls button {
+    pointer-events: auto;
+    border: 1px solid rgba(34,211,238,0.45);
+    background: rgba(8,20,40,0.85);
+    color: var(--cyan);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+  }
+  #controls button:hover { background: rgba(34,211,238,0.18); }
+  #controls button.rec { border-color: #f472b6; color: #f472b6; }
+  #status {
+    position: fixed; left: 16px; top: 12px; z-index: 20;
+    font-size: 12px; color: #64748b;
+    background: rgba(0,0,0,0.45);
+    padding: 4px 10px; border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+<div id="stage-wrap">
+  <canvas id="view" width="1280" height="720"></canvas>
+</div>
+<div id="status">加载中…</div>
+<div id="controls">
+  <button type="button" id="btn-play">播放</button>
+  <button type="button" id="btn-record" class="rec">录制 WebM</button>
+</div>
+<audio id="narration" preload="auto" src="narration-indextts.wav"></audio>
+<script>
+(() => {
+  'use strict';
+
+  const W = 1280, H = 720;
+  // Provisional: refine after IndexTTS wav duration is known
+  let DURATION = 62.8;
+  const FPS = 30;
+  const FONT = '"Noto Sans CJK SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+
+  const view = document.getElementById('view');
+  const ctx = view.getContext('2d', { alpha: false });
+  const audio = document.getElementById('narration');
+  const statusEl = document.getElementById('status');
+  const btnPlay = document.getElementById('btn-play');
+  const btnRecord = document.getElementById('btn-record');
+
+  let cues = [];
+  let playing = false;
+  let t0 = 0;
+  let pausedAt = 0;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recording = false;
+  let renderMode = false;
+
+  const sprites = { idle: null, wave: null, talk: null, point: null, nod: null, emphasize: null, auth: null };
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('fail ' + src));
+      img.src = src;
+    });
+  }
+
+  async function tryLoad(paths) {
+    for (const p of paths) {
+      try { return await loadImage(p); } catch (_) {}
+    }
+    return null;
+  }
+
+  async function loadSprites() {
+    sprites.auth = await tryLoad([
+      'assets/ta-chibi-front-auth-rgba.png',
+      'assets/ta-chibi-front-auth.png',
+      'assets/pose-idle.png'
+    ]);
+    sprites.idle = await tryLoad(['assets/pose-idle.png']) || sprites.auth;
+    sprites.wave = await tryLoad(['assets/pose-wave.png']) || sprites.idle;
+    sprites.talk = await tryLoad(['assets/pose-talk.png']) || sprites.idle;
+    sprites.point = await tryLoad(['assets/pose-point.png']) || sprites.idle;
+    sprites.nod = await tryLoad(['assets/pose-nod.png']) || sprites.idle;
+    sprites.emphasize = sprites.talk || sprites.idle;
+  }
+
+  async function loadCues() {
+    try {
+      const res = await fetch('cues.json');
+      cues = await res.json();
+    } catch (_) {
+      cues = [
+        { t: 0.0, end: 7.5, text: '各位 agent，先听清楚：照这份 Playbook，你们也能复刻带真口型的程序化解说片。', gesture: 'wave', scene: 'hook' },
+        { t: 7.5, end: 22.0, text: '成片主轴：Canvas 二维 + IndexTTS + 烧字幕 + 左下 InfiniteTalk。', gesture: 'talk', scene: 'arch' },
+        { t: 22.0, end: 28.5, text: '流程四步：旁白/cues → IndexTTS。', gesture: 'emphasize', scene: 'step_tts' },
+        { t: 28.5, end: 35.0, text: 'HTML seek 按帧渲染，不要 Three.js。', gesture: 'point', scene: 'step_stage' },
+        { t: 35.0, end: 43.0, text: 'InfiniteTalk 图+音频 → rembg 叠左下。', gesture: 'talk', scene: 'step_lipsync' },
+        { t: 43.0, end: 55.0, text: '坑：不透明定妆 · 7.72s 封顶 · qtrle ARGB。', gesture: 'emphasize', scene: 'pitfalls' },
+        { t: 55.0, end: 62.0, text: '打开 AGENT-PLAYBOOK-explainer-lipsync.md 照做。', gesture: 'wave', scene: 'cta' }
+      ];
+    }
+  }
+
+  const PARTICLE_N = 80;
+  const particles = Array.from({ length: PARTICLE_N }, (_, i) => ({
+    x: (i * 97) % W,
+    y: (i * 53) % H,
+    vx: ((i % 7) - 3) * 0.08,
+    vy: ((i % 5) - 2) * 0.08,
+    r: 0.7 + (i % 5) * 0.28,
+    a: 0.16 + (i % 6) * 0.05
+  }));
+
+  function updateParticles(t) {
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x = ((i * 97) + t * p.vx * 60 + W) % W;
+      p.y = ((i * 53) + t * p.vy * 60 + H) % H;
+    }
+  }
+
+  function drawParticles(c) {
+    c.save();
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      c.fillStyle = `rgba(34,211,238,${p.a})`;
+      c.beginPath();
+      c.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(x + rr, y);
+    c.arcTo(x + w, y, x + w, y + h, rr);
+    c.arcTo(x + w, y + h, x, y + h, rr);
+    c.arcTo(x, y + h, x, y, rr);
+    c.arcTo(x, y, x + w, y, rr);
+    c.closePath();
+  }
+
+  function glassCard(c, x, y, w, h, glow) {
+    c.save();
+    roundRect(c, x, y, w, h, 14);
+    c.fillStyle = 'rgba(8, 20, 40, 0.78)';
+    c.fill();
+    c.strokeStyle = glow || 'rgba(34,211,238,0.45)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.restore();
+  }
+
+  function cueAt(t) {
+    let cur = cues[0] || null;
+    for (const cu of cues) {
+      if (t >= cu.t) cur = cu;
+    }
+    return cur;
+  }
+
+  function sceneLocal(t, cue) {
+    if (!cue) return t;
+    let s = cue.t;
+    for (let i = cues.indexOf(cue); i >= 0; i--) {
+      if (cues[i].scene === cue.scene) s = cues[i].t;
+      else break;
+    }
+    return Math.max(0, t - s);
+  }
+
+  function easeOutCubic(x) {
+    return 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  }
+
+  function wrapText(c, text, maxW) {
+    if (!text) return [];
+    const chars = [...text];
+    const lines = [];
+    let line = '';
+    for (const ch of chars) {
+      const test = line + ch;
+      if (c.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = ch;
+      } else line = test;
+    }
+    if (line) lines.push(line);
+    return lines.slice(0, 4);
+  }
+
+  function drawBg(c, t, scene) {
+    const g = c.createLinearGradient(0, 0, W, H);
+    if (scene === 'pitfalls') {
+      g.addColorStop(0, '#1a1008');
+      g.addColorStop(0.55, '#120c18');
+      g.addColorStop(1, '#1a0810');
+    } else if (scene === 'step_lipsync') {
+      g.addColorStop(0, '#081018');
+      g.addColorStop(0.5, '#0c1230');
+      g.addColorStop(1, '#140828');
+    } else if (scene === 'cta') {
+      g.addColorStop(0, '#041018');
+      g.addColorStop(0.5, '#071428');
+      g.addColorStop(1, '#12081f');
+    } else {
+      g.addColorStop(0, '#050816');
+      g.addColorStop(0.5, '#0a1028');
+      g.addColorStop(1, '#12081f');
+    }
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+
+    c.strokeStyle = 'rgba(34,211,238,0.045)';
+    c.lineWidth = 1;
+    for (let x = 0; x < W; x += 64) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    for (let y = 0; y < H; y += 64) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const ox = 220 + Math.sin(t * 0.4) * 90;
+    const oy = 160 + Math.cos(t * 0.33) * 70;
+    const rg = c.createRadialGradient(ox, oy, 8, ox, oy, 240);
+    rg.addColorStop(0, 'rgba(34,211,238,0.14)');
+    rg.addColorStop(1, 'rgba(34,211,238,0)');
+    c.fillStyle = rg;
+    c.fillRect(0, 0, W, H);
+    const ox2 = W - 240 + Math.cos(t * 0.35) * 80;
+    const oy2 = H - 180 + Math.sin(t * 0.45) * 55;
+    const rg2 = c.createRadialGradient(ox2, oy2, 8, ox2, oy2, 260);
+    rg2.addColorStop(0, 'rgba(167,139,250,0.12)');
+    rg2.addColorStop(1, 'rgba(167,139,250,0)');
+    c.fillStyle = rg2;
+    c.fillRect(0, 0, W, H);
+    c.restore();
+  }
+
+  function drawHook(c, t, local) {
+    const fade = easeOutCubic(local / 0.5);
+    c.save();
+    c.globalAlpha = fade;
+
+    glassCard(c, W / 2 - 170, 100, 340, 34, 'rgba(34,211,238,0.55)');
+    c.fillStyle = '#22d3ee';
+    c.font = `600 12px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('FOR OTHER AGENTS · 可复刻管线', W / 2, 122);
+
+    const title = 'Agent Playbook';
+    const reveal = Math.min(1, local / 1.0);
+    const n = Math.max(1, Math.floor(title.length * reveal));
+    const shown = title.slice(0, n);
+    c.save();
+    c.translate(W / 2, 220);
+    const scale = 1 + Math.sin(t * 2) * 0.01;
+    c.scale(scale, scale);
+    const grad = c.createLinearGradient(-280, 0, 280, 0);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.45, '#22d3ee');
+    grad.addColorStop(1, '#a78bfa');
+    c.fillStyle = grad;
+    c.font = `800 58px ${FONT}`;
+    c.textAlign = 'center';
+    c.shadowColor = 'rgba(34,211,238,0.5)';
+    c.shadowBlur = 28;
+    c.fillText(shown, 0, 0);
+    c.shadowBlur = 0;
+    if (reveal < 1) {
+      const tw = c.measureText(shown).width;
+      c.fillStyle = `rgba(34,211,238,${0.4 + 0.6 * Math.abs(Math.sin(t * 8))})`;
+      c.fillRect(tw / 2 + 6, -38, 3, 46);
+    }
+    c.restore();
+
+    c.fillStyle = '#e2e8f0';
+    c.font = `700 28px ${FONT}`;
+    c.textAlign = 'center';
+    c.globalAlpha = fade * easeOutCubic((local - 0.7) / 0.45);
+    c.fillText('带真口型的程序化解说片 · 照做即可', W / 2, 290);
+
+    c.fillStyle = '#94a3b8';
+    c.font = `400 16px ${FONT}`;
+    c.globalAlpha = fade * easeOutCubic((local - 1.2) / 0.45);
+    c.fillText('不是招生片加长版 · 讲的是 Playbook 管线本身', W / 2, 330);
+
+    const pills = [
+      { label: 'Canvas 2D', color: '#22d3ee' },
+      { label: 'IndexTTS', color: '#a78bfa' },
+      { label: '烧字幕', color: '#f472b6' },
+      { label: 'InfiniteTalk', color: '#fb923c' }
+    ];
+    pills.forEach((p, i) => {
+      const appear = easeOutCubic((local - 1.6 - i * 0.18) / 0.4);
+      if (appear <= 0) return;
+      const x = W / 2 - 340 + i * 175;
+      const y = 400 + (1 - appear) * 24;
+      c.save();
+      c.globalAlpha = fade * appear;
+      glassCard(c, x, y, 160, 72, p.color);
+      c.fillStyle = p.color;
+      c.font = `700 18px ${FONT}`;
+      c.textAlign = 'center';
+      c.fillText(p.label, x + 80, y + 42);
+      c.restore();
+    });
+    c.restore();
+  }
+
+  function drawArch(c, t, local) {
+    c.save();
+    c.fillStyle = '#22d3ee';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('成片架构 · 只要对口型层', 72, 88);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('≠ 桌面 AI 女友整包  ·  ≠ 整片 MiniMax H3', 72, 114);
+
+    // NOT badges
+    const bans = [
+      { title: 'NOT', body: '桌面 AI 女友 App', sub: '麦 / Whisper / LLM / Duix' },
+      { title: 'NOT', body: '整片 H3 扩散', sub: 'H3 只做手势支线' }
+    ];
+    bans.forEach((b, i) => {
+      const appear = easeOutCubic((local - 0.2 - i * 0.25) / 0.4);
+      const x = 72 + i * 280;
+      c.save();
+      c.globalAlpha = Math.max(0, appear);
+      glassCard(c, x, 140, 260, 100, 'rgba(244,114,182,0.5)');
+      c.fillStyle = '#f472b6';
+      c.font = `800 14px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillText(b.title, x + 18, 168);
+      c.fillStyle = '#e2e8f0';
+      c.font = `700 18px ${FONT}`;
+      c.fillText(b.body, x + 18, 198);
+      c.fillStyle = '#94a3b8';
+      c.font = `400 12px ${FONT}`;
+      c.fillText(b.sub, x + 18, 222);
+      c.restore();
+    });
+
+    // YES pipeline nodes
+    const nodes = [
+      { id: 'Canvas 2D', cn: '主舞台' },
+      { id: 'IndexTTS', cn: '旁白 wav' },
+      { id: '烧字幕', cn: '中文 SRT' },
+      { id: 'InfiniteTalk', cn: '左下口型' }
+    ];
+    const lit = Math.min(nodes.length, Math.floor(Math.max(0, local - 1.0) * 1.6) + 1);
+    const baseY = 420;
+    const startX = 140;
+    const gap = 260;
+
+    c.strokeStyle = 'rgba(34,211,238,0.28)';
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(startX, baseY);
+    c.lineTo(startX + gap * (nodes.length - 1), baseY);
+    c.stroke();
+
+    const pkt = Math.min(nodes.length - 1, Math.max(0, local - 1.0) * 1.35);
+    const pktX = startX + pkt * gap;
+    c.save();
+    c.shadowColor = '#22d3ee';
+    c.shadowBlur = 16;
+    c.fillStyle = '#22d3ee';
+    c.beginPath();
+    c.arc(pktX, baseY, 7, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    nodes.forEach((s, i) => {
+      const x = startX + i * gap;
+      const on = i < lit;
+      const pulse = on ? 1 + 0.03 * Math.sin(t * 4 + i) : 1;
+      c.save();
+      c.translate(x, baseY);
+      c.scale(pulse, pulse);
+      c.beginPath();
+      c.arc(0, 0, 14, 0, Math.PI * 2);
+      c.fillStyle = on ? '#22d3ee' : '#334155';
+      c.fill();
+      glassCard(c, -90, -110, 180, 78, on ? 'rgba(34,211,238,0.7)' : 'rgba(100,116,139,0.35)');
+      c.fillStyle = on ? '#e2e8f0' : '#64748b';
+      c.font = `700 16px ${FONT}`;
+      c.textAlign = 'center';
+      c.fillText(s.id, 0, -72);
+      c.fillStyle = on ? '#67e8f9' : '#64748b';
+      c.font = `400 13px ${FONT}`;
+      c.fillText(s.cn, 0, -48);
+      c.restore();
+    });
+
+    glassCard(c, 640, 140, 520, 100, 'rgba(34,211,238,0.4)');
+    c.fillStyle = '#67e8f9';
+    c.font = `700 14px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('YES · Master 公式', 660, 172);
+    c.fillStyle = '#e2e8f0';
+    c.font = `600 15px ${FONT}`;
+    c.fillText('程序主舞台 + IndexTTS + 烧字幕', 660, 202);
+    c.fillText('+ 左下 InfiniteTalk 对口型讲解员', 660, 226);
+    c.restore();
+  }
+
+  function drawStepCards(c, t, local, activeIdx, title, subtitle) {
+    c.save();
+    c.fillStyle = '#22d3ee';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText(title, 72, 88);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText(subtitle, 72, 114);
+
+    const steps = [
+      { n: '01', label: '旁白 + cues', sub: '短句时间轴', color: '#22d3ee' },
+      { n: '02', label: 'IndexTTS', sub: 'RH · 音色参考', color: '#a78bfa' },
+      { n: '03', label: 'Canvas seek', sub: '无 Three.js', color: '#f472b6' },
+      { n: '04', label: 'InfiniteTalk', sub: '图+音频→叠片', color: '#fb923c' }
+    ];
+    steps.forEach((s, i) => {
+      const appear = easeOutCubic((local - i * 0.12) / 0.4);
+      const on = i === activeIdx;
+      const x = 72 + i * 290;
+      const y = 200;
+      c.save();
+      c.globalAlpha = Math.max(0.25, appear);
+      const glow = on ? s.color : 'rgba(100,116,139,0.35)';
+      glassCard(c, x, y, 270, 280, glow);
+      if (on) {
+        c.strokeStyle = s.color;
+        c.lineWidth = 2;
+        roundRect(c, x + 4, y + 4, 262, 272, 12);
+        c.stroke();
+        const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+        c.fillStyle = `rgba(34,211,238,${0.08 + pulse * 0.08})`;
+        roundRect(c, x + 4, y + 4, 262, 272, 12);
+        c.fill();
+      }
+      c.fillStyle = on ? s.color : '#64748b';
+      c.font = `800 36px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillText(s.n, x + 24, y + 70);
+      c.fillStyle = on ? '#e2e8f0' : '#94a3b8';
+      c.font = `700 26px ${FONT}`;
+      c.fillText(s.label, x + 24, y + 130);
+      c.fillStyle = on ? '#94a3b8' : '#64748b';
+      c.font = `400 15px ${FONT}`;
+      c.fillText(s.sub, x + 24, y + 168);
+      if (on) {
+        c.fillStyle = s.color;
+        c.font = `600 13px ${FONT}`;
+        c.fillText('◀ 当前讲解', x + 24, y + 230);
+      }
+      c.restore();
+    });
+    c.restore();
+  }
+
+  function drawStepTts(c, t, local) {
+    drawStepCards(c, t, local, 1, 'Step 02 · IndexTTS on RunningHub', '音色参考 wav + 旁白文本 → narration-indextts.wav');
+    // RH label chip
+    const appear = easeOutCubic((local - 0.6) / 0.4);
+    c.save();
+    c.globalAlpha = appear;
+    glassCard(c, 72, 520, 560, 48, 'rgba(167,139,250,0.5)');
+    c.fillStyle = '#c4b5fd';
+    c.font = `600 14px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('RH · IndexTTS 2.5  ·  post/2087748051929755649', 90, 550);
+    c.restore();
+  }
+
+  function drawStepStage(c, t, local) {
+    drawStepCards(c, t, local, 2, 'Step 03 · Canvas seek(t) 渲染', 'Playwright 按绝对秒截帧 · 禁止 Three.js / WebGL 主舞台');
+    const appear = easeOutCubic((local - 0.4) / 0.4);
+    c.save();
+    c.globalAlpha = appear;
+    glassCard(c, 72, 520, 720, 48, 'rgba(244,114,182,0.45)');
+    c.fillStyle = '#f9a8d4';
+    c.font = `600 14px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('window.__explainer.seek(t)  →  ffmpeg 组帧  ·  ?noNarrator=1 出底片', 90, 550);
+    c.restore();
+  }
+
+  function drawStepLipsync(c, t, local) {
+    c.save();
+    c.fillStyle = '#fb923c';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('Step 04 · InfiniteTalk 对口型', 72, 88);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('定妆图 + 切段音频 → RH → rembg → 左下叠片', 72, 114);
+
+    const flow = [
+      { label: '权威定妆', sub: 'opaque PNG', color: '#22d3ee' },
+      { label: '切段 wav', sub: '≤ 7.72s', color: '#a78bfa' },
+      { label: 'InfiniteTalk', sub: 'AI女友对口型V2', color: '#fb923c' },
+      { label: 'rembg', sub: '抠底', color: '#f472b6' },
+      { label: 'overlay', sub: '左下安全区', color: '#67e8f9' }
+    ];
+    flow.forEach((f, i) => {
+      const appear = easeOutCubic((local - i * 0.22) / 0.4);
+      const x = 72 + i * 230;
+      const y = 220;
+      c.save();
+      c.globalAlpha = Math.max(0, appear);
+      glassCard(c, x, y, 210, 160, f.color);
+      c.fillStyle = f.color;
+      c.font = `800 18px ${FONT}`;
+      c.textAlign = 'center';
+      c.fillText(f.label, x + 105, y + 70);
+      c.fillStyle = '#94a3b8';
+      c.font = `400 13px ${FONT}`;
+      c.fillText(f.sub, x + 105, y + 104);
+      if (i < flow.length - 1) {
+        c.fillStyle = 'rgba(34,211,238,0.7)';
+        c.font = `700 22px ${FONT}`;
+        c.fillText('→', x + 220, y + 82);
+      }
+      c.restore();
+    });
+
+    glassCard(c, 72, 430, 900, 90, 'rgba(251,146,60,0.4)');
+    c.fillStyle = '#fdba74';
+    c.font = `700 15px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('RH · AI女友对口型V2 / InfiniTetalk', 92, 468);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 13px ${FONT}`;
+    c.fillText('ai-detail/1961314367356735490  ·  只要对口型层，不接实时桌面 App', 92, 498);
+    c.restore();
+  }
+
+  function drawPitfalls(c, t, local) {
+    c.save();
+    c.fillStyle = '#fbbf24';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('踩坑 · 一口气记牢', 72, 88);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('Opaque 定妆 · 7.72s 封顶冻帧 · qtrle ARGB（不是本机 webm alpha）', 72, 114);
+
+    const warns = [
+      { icon: '①', title: '定妆不透明', body: '用 ta-chibi-front-auth.png\n错误 RGBA 会穿帮成白鬼影', color: '#fbbf24' },
+      { icon: '②', title: '~7.72s 封顶', body: 'InfiniteTalk 非会员截断\n音频更长 → 本地冻帧补齐', color: '#fb923c' },
+      { icon: '③', title: 'qtrle ARGB', body: '透明通道用 .mov\n别指望本机 webm 自带 alpha', color: '#f472b6' }
+    ];
+    warns.forEach((w, i) => {
+      const appear = easeOutCubic((local - i * 0.35) / 0.45);
+      const x = 72 + i * 380;
+      const y = 180;
+      c.save();
+      c.globalAlpha = Math.max(0, appear);
+      const shake = appear > 0.95 ? Math.sin(t * 8 + i) * 1.2 : 0;
+      glassCard(c, x + shake, y, 350, 280, w.color);
+      c.fillStyle = w.color;
+      c.font = `800 28px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillText(w.icon, x + 24, y + 56);
+      c.font = `700 22px ${FONT}`;
+      c.fillText(w.title, x + 70, y + 56);
+      c.fillStyle = '#e2e8f0';
+      c.font = `500 16px ${FONT}`;
+      const lines = w.body.split('\n');
+      lines.forEach((ln, li) => {
+        c.fillText(ln, x + 24, y + 120 + li * 36);
+      });
+      // warn stripe
+      c.fillStyle = w.color;
+      roundRect(c, x + 18, y + 220, 314, 8, 4);
+      c.fill();
+      c.restore();
+    });
+    c.restore();
+  }
+
+  function drawCTA(c, t, local) {
+    c.save();
+    c.fillStyle = '#e2e8f0';
+    c.font = `700 24px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText('下一步 · 打开 Playbook 照做', 72, 100);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 14px ${FONT}`;
+    c.fillText('promo/docs/AGENT-PLAYBOOK-explainer-lipsync.md', 72, 126);
+
+    const appear = easeOutCubic(local / 0.55);
+    c.save();
+    c.globalAlpha = appear;
+    glassCard(c, 160, 180, 960, 220, 'rgba(34,211,238,0.55)');
+    c.fillStyle = '#22d3ee';
+    c.font = `600 14px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('AUTHORITATIVE AGENT DOC', W / 2, 230);
+    c.fillStyle = '#fff';
+    c.font = `800 32px ${FONT}`;
+    c.fillText('AGENT-PLAYBOOK-explainer-lipsync.md', W / 2, 290);
+    c.fillStyle = '#94a3b8';
+    c.font = `400 16px ${FONT}`;
+    c.fillText('IndexTTS → seek 底片 → InfiniteTalk → rembg → master', W / 2, 340);
+    c.restore();
+
+    const pulse = 1 + 0.035 * Math.sin(t * 4);
+    c.save();
+    c.translate(W / 2, 500);
+    c.scale(pulse, pulse);
+    roundRect(c, -220, -32, 440, 64, 32);
+    const bg = c.createLinearGradient(-220, 0, 220, 0);
+    bg.addColorStop(0, '#0891b2');
+    bg.addColorStop(1, '#7c3aed');
+    c.fillStyle = bg;
+    c.shadowColor = 'rgba(34,211,238,0.55)';
+    c.shadowBlur = 24;
+    c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = '#fff';
+    c.font = `700 22px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('按命令跑起来 · 交出可验收成片', 0, 10);
+    c.restore();
+    c.restore();
+  }
+
+  function drawScene(c, scene, t, cue) {
+    const local = sceneLocal(t, cue);
+    switch (scene) {
+      case 'hook': drawHook(c, t, local); break;
+      case 'arch': drawArch(c, t, local); break;
+      case 'step_tts': drawStepTts(c, t, local); break;
+      case 'step_stage': drawStepStage(c, t, local); break;
+      case 'step_lipsync': drawStepLipsync(c, t, local); break;
+      case 'pitfalls': drawPitfalls(c, t, local); break;
+      case 'cta': drawCTA(c, t, local); break;
+      default: drawHook(c, t, local);
+    }
+  }
+
+  function drawSceneLabel(c, scene) {
+    const map = {
+      hook: 'HOOK · 可复刻',
+      arch: 'ARCHITECTURE',
+      step_tts: 'STEP · IndexTTS',
+      step_stage: 'STEP · Canvas seek',
+      step_lipsync: 'STEP · InfiniteTalk',
+      pitfalls: 'PITFALLS',
+      cta: 'CTA · PLAYBOOK'
+    };
+    glassCard(c, 36, 24, 240, 34, 'rgba(34,211,238,0.4)');
+    c.fillStyle = '#22d3ee';
+    c.font = `600 12px ${FONT}`;
+    c.textAlign = 'left';
+    c.fillText(map[scene] || scene.toUpperCase(), 52, 46);
+  }
+
+  function drawNarrator(c, t, gesture) {
+    if (new URLSearchParams(location.search).get('noNarrator') === '1') return;
+    const baseX = 28;
+    const targetH = 300;
+    const glowX = baseX + 110;
+    const glowY = H - 180;
+    c.save();
+    const vg = c.createRadialGradient(glowX, glowY, 10, glowX, glowY, 140);
+    vg.addColorStop(0, 'rgba(34,211,238,0.2)');
+    vg.addColorStop(0.55, 'rgba(167,139,250,0.07)');
+    vg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = vg;
+    c.beginPath();
+    c.arc(glowX, glowY, 140, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    const key = gesture === 'emphasize' ? 'emphasize' : gesture;
+    const img = sprites[key] || sprites.auth || sprites.idle;
+    if (!img) return;
+    const scale = targetH / img.height;
+    const dw = img.width * scale;
+    const dh = targetH;
+    let bob = Math.sin(t * 2.4) * 4;
+    let rot = Math.sin(t * 1.6) * 0.02;
+    let sx = 1, sy = 1, lean = 0;
+    switch (gesture) {
+      case 'wave': bob = Math.sin(t * 5) * 5; rot = Math.sin(t * 6) * 0.05; break;
+      case 'talk': bob = Math.sin(t * 3.2) * 3; sy = 1 + Math.sin(t * 10) * 0.018; break;
+      case 'point': lean = 0.05; break;
+      case 'nod': rot = Math.sin(t * 5) * 0.08; bob = Math.abs(Math.sin(t * 5)) * -6; break;
+      case 'emphasize': sx = 1 + Math.sin(t * 7) * 0.04; sy = 1 - Math.sin(t * 7) * 0.02; break;
+    }
+    c.save();
+    c.translate(baseX + dw / 2, H - 78 + bob);
+    c.rotate(rot + lean);
+    c.scale(sx, sy);
+    c.drawImage(img, -dw / 2, -dh, dw, dh);
+    c.restore();
+  }
+
+  function drawSubs(c, text) {
+    if (!text) return;
+    c.save();
+    c.font = `700 22px ${FONT}`;
+    const maxW = W - 320;
+    const lines = wrapText(c, text, maxW);
+    const lineH = 32;
+    const padX = 20, padY = 12;
+    const tw = Math.min(maxW, Math.max(...lines.map(l => c.measureText(l).width)) + padX * 2);
+    const th = lines.length * lineH + padY * 2 - 4;
+    const x = (W - tw) / 2 + 40;
+    const y = H - th - 36;
+    roundRect(c, x, y, tw, th, 12);
+    c.fillStyle = 'rgba(2, 6, 23, 0.78)';
+    c.fill();
+    c.strokeStyle = 'rgba(34,211,238,0.4)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.fillStyle = '#f8fafc';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    lines.forEach((ln, i) => {
+      c.fillText(ln, x + tw / 2, y + padY + lineH * i + lineH / 2 - 2, tw - padX * 2);
+    });
+    c.restore();
+  }
+
+  function drawFrame(t) {
+    const cue = cueAt(t);
+    const scene = (cue && cue.scene) || 'hook';
+    const gesture = (cue && cue.gesture) || 'idle';
+    const text = (cue && cue.text) || '';
+
+    drawBg(ctx, t, scene);
+    updateParticles(t);
+    drawParticles(ctx);
+    drawScene(ctx, scene, t, cue);
+    drawSceneLabel(ctx, scene);
+    drawNarrator(ctx, t, gesture);
+    drawSubs(ctx, text);
+
+    ctx.fillStyle = 'rgba(148,163,184,0.5)';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(t.toFixed(1) + 's / ' + DURATION.toFixed(1) + 's', W - 24, 28);
+  }
+
+  function nowTime() {
+    if (renderMode) return pausedAt;
+    if (!playing) return pausedAt;
+    if (audio && !audio.paused && isFinite(audio.currentTime) && audio.duration > 0) {
+      return Math.min(DURATION, audio.currentTime);
+    }
+    return Math.min(DURATION, (performance.now() - t0) / 1000);
+  }
+
+  async function seek(t) {
+    renderMode = true;
+    playing = false;
+    pausedAt = Math.max(0, Math.min(DURATION, t));
+    drawFrame(pausedAt);
+    return pausedAt;
+  }
+
+  window.__explainer = {
+    seek,
+    duration: DURATION,
+    fps: FPS,
+    width: W,
+    height: H,
+    canvas: view,
+    getTime: () => pausedAt,
+    ready: false,
+    useNarrVideo: false,
+    setDuration(d) {
+      DURATION = Number(d) || DURATION;
+      window.__explainer.duration = DURATION;
+    }
+  };
+
+  let lastTs = performance.now();
+  function loop(ts) {
+    lastTs = ts;
+    if (!renderMode) {
+      let t = nowTime();
+      if (playing && t >= DURATION) {
+        playing = false;
+        pausedAt = DURATION;
+        if (audio) { try { audio.pause(); } catch (_) {} }
+        btnPlay.textContent = '重播';
+        if (recording) stopRecording();
+      }
+      drawFrame(t);
+      statusEl.textContent = playing
+        ? `播放中 ${t.toFixed(1)}s · ${cueAt(t)?.scene || ''}`
+        : (t > 0 ? `暂停 ${t.toFixed(1)}s` : '就绪 · Playbook 60s');
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function play() {
+    renderMode = false;
+    if (playing) {
+      playing = false;
+      pausedAt = nowTime();
+      if (audio) audio.pause();
+      btnPlay.textContent = '继续';
+      return;
+    }
+    if (pausedAt >= DURATION - 0.05) pausedAt = 0;
+    playing = true;
+    t0 = performance.now() - pausedAt * 1000;
+    if (audio) {
+      try {
+        audio.currentTime = pausedAt;
+        audio.play().catch(() => {});
+      } catch (_) {}
+    }
+    btnPlay.textContent = '暂停';
+  }
+
+  function startRecording() {
+    if (recording) return;
+    recordedChunks = [];
+    const stream = view.captureStream(30);
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx && audio) {
+        const actx = new AudioCtx();
+        const src = actx.createMediaElementSource(audio);
+        const dest = actx.createMediaStreamDestination();
+        src.connect(dest);
+        src.connect(actx.destination);
+        dest.stream.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+      }
+    } catch (_) {}
+    let mime = 'video/webm;codecs=vp9,opus';
+    if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8,opus';
+    if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 7_000_000 });
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'playbook-60s.webm';
+      a.click();
+      statusEl.textContent = '录制完成 · 已下载 WebM';
+    };
+    mediaRecorder.start(200);
+    recording = true;
+    btnRecord.textContent = '停止录制';
+    pausedAt = 0;
+    if (!playing) play();
+  }
+
+  function stopRecording() {
+    if (!recording || !mediaRecorder) return;
+    recording = false;
+    try { mediaRecorder.stop(); } catch (_) {}
+    btnRecord.textContent = '录制 WebM';
+  }
+
+  btnPlay.addEventListener('click', (e) => { e.stopPropagation(); play(); });
+  btnRecord.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (recording) stopRecording();
+    else startRecording();
+  });
+  view.addEventListener('click', () => play());
+
+  (async () => {
+    await Promise.all([loadSprites(), loadCues()]);
+    // Prefer audio duration when wav exists
+    try {
+      await new Promise((resolve) => {
+        if (!audio) return resolve();
+        const done = () => resolve();
+        if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) return done();
+        audio.addEventListener('loadedmetadata', done, { once: true });
+        audio.addEventListener('error', done, { once: true });
+        setTimeout(done, 1500);
+      });
+      if (audio && isFinite(audio.duration) && audio.duration > 1) {
+        const d = Math.ceil((audio.duration + 2) * 10) / 10; // +2s CTA hold
+        DURATION = d;
+        window.__explainer.duration = d;
+      }
+    } catch (_) {}
+
+    window.__explainer.ready = true;
+    statusEl.textContent = '就绪 · Playbook 60s · Canvas 2D';
+    drawFrame(0);
+    requestAnimationFrame(loop);
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('autoplay') === '1') setTimeout(() => play(), 300);
+    if (params.get('record') === '1') setTimeout(() => startRecording(), 500);
+  })().catch((err) => {
+    statusEl.textContent = '加载失败: ' + err.message;
+    console.error(err);
+  });
+})();
+</script>
+</body>
+</html>
