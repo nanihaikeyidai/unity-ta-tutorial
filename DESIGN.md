@@ -70,7 +70,6 @@ Shader 章（4 课）
 - 进度本地存储、章节测验  
 - 可选录制好的真人/TTS 音频文件（不依赖系统声）  
 - 英文切换、PWA 离线包  
-- 公网部署：接 Cloudflare Pages / GitHub Pages / 自有域名  
 
 ---
 

@@ -176,10 +176,7 @@ NO_NARRATOR=1 \
 
 预览：
 
-```bash
-cd /workspace/unity-ta-tutorial/promo && python3 -m http.server 8765
-# http://127.0.0.1:8765/explainer-v2.html?autoplay=1
-```
+用静态服务器打开 `promo/` 后访问 `explainer-v2.html?autoplay=1` 即可预览。
 
 ### Stage E — InfiniteTalk 对口型（AI 女友方式）
 

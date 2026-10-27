@@ -24,7 +24,6 @@
 | `narration.srt` / `cues.json` | 字幕与场景/手势时间轴 |
 
 ```bash
-cd /workspace/unity-ta-tutorial/promo
 bash scripts/compose-lipsync-v3.sh   # 需已有 infinitetalk/out/lipsync-seg0N.mp4
 ```
 
@@ -45,15 +44,14 @@ bash scripts/compose-lipsync-v3.sh   # 需已有 infinitetalk/out/lipsync-seg0N.
 
 ### 打开预览
 
-```bash
-cd /workspace/unity-ta-tutorial/promo
-python3 -m http.server 8765
-```
+用静态服务器打开 `promo/` 目录后访问 `explainer-v2.html`（可用 `?autoplay=1`）。
 
-- 预览：`http://127.0.0.1:8765/explainer-v2.html`
-- 自动播放：`...?autoplay=1`
-- 无讲解员重渲底片：`NO_NARRATOR=1 node scripts/render-v2.mjs`
-- 重渲含讲解员 v2：`node scripts/render-v2.mjs`
+```bash
+# 无讲解员重渲底片
+NO_NARRATOR=1 node scripts/render-v2.mjs
+# 重渲含讲解员 v2
+node scripts/render-v2.mjs
+```
 
 ## 旧文件
 

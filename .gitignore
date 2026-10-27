@@ -48,3 +48,6 @@ audio/ref/
 *.blend
 *.blend1
 scripts/*.log
+
+PUBLIC_URL.txt
+*.trycloudflare.com
