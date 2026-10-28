@@ -1,0 +1,86 @@
+{
+  "audio_total": 47.771882,
+  "character": "in/character.png",
+  "max_seg_s": 7.5,
+  "silence_splice": {
+    "removed": [
+      10.7,
+      23.7
+    ],
+    "delta": 13.0,
+    "raw_backup": "../narration-indextts-raw-with-silence.wav",
+    "note": "Original IndexTTS had ~13s dead silence 10.70–23.70; cut-concat removed before IT cuts."
+  },
+  "segments": [
+    {
+      "id": "seg01",
+      "start": 0.0,
+      "end": 7.0,
+      "duration": 7.0,
+      "audio": "audio/seg01.wav",
+      "out": "out/lipsync-seg01.mp4",
+      "skip_rh": false,
+      "note": ""
+    },
+    {
+      "id": "seg02",
+      "start": 7.0,
+      "end": 14.5,
+      "duration": 7.5,
+      "audio": "audio/seg02.wav",
+      "out": "out/lipsync-seg02.mp4",
+      "skip_rh": false,
+      "note": ""
+    },
+    {
+      "id": "seg03",
+      "start": 14.5,
+      "end": 22.0,
+      "duration": 7.5,
+      "audio": "audio/seg03.wav",
+      "out": "out/lipsync-seg03.mp4",
+      "skip_rh": false,
+      "note": ""
+    },
+    {
+      "id": "seg04",
+      "start": 22.0,
+      "end": 29.5,
+      "duration": 7.5,
+      "audio": "audio/seg04.wav",
+      "out": "out/lipsync-seg04.mp4",
+      "skip_rh": false,
+      "note": ""
+    },
+    {
+      "id": "seg05",
+      "start": 29.5,
+      "end": 37.0,
+      "duration": 7.5,
+      "audio": "audio/seg05.wav",
+      "out": "out/lipsync-seg05.mp4",
+      "skip_rh": false,
+      "note": ""
+    },
+    {
+      "id": "seg06",
+      "start": 37.0,
+      "end": 44.5,
+      "duration": 7.5,
+      "audio": "audio/seg06.wav",
+      "out": "out/lipsync-seg06.mp4",
+      "skip_rh": false,
+      "note": ""
+    },
+    {
+      "id": "seg07",
+      "start": 44.5,
+      "end": 47.771882,
+      "duration": 3.271882,
+      "audio": "audio/seg07.wav",
+      "out": "out/lipsync-seg07.mp4",
+      "skip_rh": false,
+      "note": ""
+    }
+  ]
+}

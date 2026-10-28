@@ -51,3 +51,11 @@ scripts/*.log
 
 PUBLIC_URL.txt
 *.trycloudflare.com
+
+# playbook-60s lipsync intermediates / QC / backups
+promo/playbook-60s/infinitetalk/out/*-padded.*
+promo/playbook-60s/infinitetalk/out/lipsync-all-qc.mp4
+promo/playbook-60s/infinitetalk/out/archive-old-chibi/
+promo/playbook-60s/infinitetalk/out/_check-*.png
+promo/playbook-60s/narration-indextts-raw-with-silence.wav
+promo/playbook-60s/scripts/*.bak*
