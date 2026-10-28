@@ -1,7 +1,4 @@
-# Unity TA 实战学堂
 
-面向技术美术的 **Unity URP / 性能优化 / Shader** 中文互动教程站。  
-深色科技风 UI · 程序动画演示 · IndexTTS 2.5 中文讲解 + 同步字幕。
 
 ## 解说片 Agent Playbook（必读）
 
